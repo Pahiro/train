@@ -28,7 +28,14 @@
             <div id="loading">Loading...</div>
         </main>
 
-        <div id="timer-fab" class="timer-fab" onclick="toggleTimer()">60</div>
+        <div id="timer-fab" class="timer-fab" onclick="toggleTimer()" aria-label="Rest Timer">
+            <!-- Icon by default, Text when active -->
+            <svg id="timer-icon" viewBox="0 0 24 24" stroke="currentColor" fill="none" class="w-6 h-6">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span id="timer-text" style="display: none;">60</span>
+        </div>
     </div>
 
     <script src="app.js"></script>

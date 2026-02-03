@@ -117,30 +117,52 @@ function renderWorkout() {
     dom.workoutContainer.innerHTML = content;
 }
 
-// Timer Logic
+// Timer Custom Logic
 window.toggleTimer = () => {
+    const icon = document.getElementById('timer-icon');
+    const text = document.getElementById('timer-text');
+
     if (state.timer.active) {
         // Stop timer
         clearInterval(state.timer.interval);
         state.timer.active = false;
         state.timer.time = state.timer.defaultTime;
-        dom.timerFab.textContent = state.timer.defaultTime;
+
+        // Reset UI
+        text.textContent = state.timer.defaultTime;
+        text.style.display = 'none';
+        icon.style.display = 'block';
         dom.timerFab.classList.remove('active');
+
+        navigator.vibrate?.(50);
     } else {
         // Start timer
         state.timer.active = true;
         dom.timerFab.classList.add('active');
+
+        // Show text, hide icon
+        icon.style.display = 'none';
+        text.style.display = 'block';
+        text.textContent = state.timer.time;
+
+        navigator.vibrate?.(50);
+
         state.timer.interval = setInterval(() => {
             state.timer.time--;
-            dom.timerFab.textContent = state.timer.time;
+            text.textContent = state.timer.time;
 
             if (state.timer.time <= 0) {
-                navigator.vibrate?.(200); // Haptic feedback
+                navigator.vibrate?.([200, 100, 200]); // Stronger feedback
                 clearInterval(state.timer.interval);
                 state.timer.active = false;
                 state.timer.time = state.timer.defaultTime;
-                dom.timerFab.textContent = state.timer.defaultTime;
+
+                // Reset UI
+                text.textContent = state.timer.defaultTime;
+                text.style.display = 'none';
+                icon.style.display = 'block';
                 dom.timerFab.classList.remove('active');
+
                 alert('Rest Finished!');
             }
         }, 1000);
@@ -149,14 +171,9 @@ window.toggleTimer = () => {
 
 // Global handlers
 window.toggleExercise = (index) => {
-    // If called from span click, we need to toggle the checkbox manually? 
-    // Actually simpler: just invert the state and re-render or update DOM.
-    // For simplicity with this lightweight structure, let's update state and save silently.
-
     const dayData = state.data[state.selectedDay];
     dayData.exercises[index].done = !dayData.exercises[index].done;
 
-    // Save immediately (fire and forget)
     fetch('/api/training', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -227,7 +244,6 @@ function updateStateFromInputs() {
     const inputs = document.querySelectorAll('.exercise-input');
     inputs.forEach(input => {
         const idx = input.dataset.index;
-        // Preserve done state, only update text
         state.data[state.selectedDay].exercises[idx].text = input.value;
     });
 }

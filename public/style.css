@@ -1,154 +1,312 @@
 :root {
-    --bg-color: #1a1a1a;
-    --card-bg: #2d2d2d;
-    --text-color: #e0e0e0;
-    --primary-color: #3498db;
-    --accent-color: #e74c3c;
-    --input-bg: #3d3d3d;
-    --border-color: #444;
+    /* Premium Dark Theme Palette */
+    --bg-color: #121212;
+    --card-bg: #1E1E1E;
+    --text-primary: #FFFFFF;
+    --text-secondary: #AAAAAA;
+    --accent-color: #00E5FF;
+    /* Cyan */
+    --accent-glow: rgba(0, 229, 255, 0.3);
+    --danger-color: #FF5252;
+    --success-color: #00E676;
+    --border-color: #333333;
+    --input-bg: #2C2C2C;
+
+    /* Spacing & Layout */
+    --radius-lg: 16px;
+    --radius-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
 }
 
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+    -webkit-tap-highlight-color: transparent;
 }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background-color: var(--bg-color);
-    color: var(--text-color);
-    line-height: 1.6;
-    height: 100vh;
+    color: var(--text-primary);
+    line-height: 1.5;
+    min-height: 100vh;
     display: flex;
     justify-content: center;
+    overflow-x: hidden;
 }
 
 .app-container {
     width: 100%;
     max-width: 600px;
-    padding: 20px;
+    padding: var(--spacing-md);
+    padding-bottom: 100px;
+    /* Space for FAB */
     display: flex;
     flex-direction: column;
 }
 
+/* Header */
 header {
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: var(--spacing-lg);
+    position: sticky;
+    top: 0;
+    background: rgba(18, 18, 18, 0.85);
+    backdrop-filter: blur(10px);
+    z-index: 10;
+    padding-top: var(--spacing-md);
+    padding-bottom: var(--spacing-md);
+    margin: 0 -16px 20px -16px;
+    /* Negative margin to stretch full width */
 }
 
 h1 {
     font-size: 1.8rem;
-    margin-bottom: 15px;
-    color: var(--primary-color);
+    font-weight: 700;
+    margin-bottom: var(--spacing-md);
+    background: linear-gradient(135deg, #FFFFFF, #B0BEC5);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
 }
 
 .day-selector-container {
-    margin-bottom: 20px;
+    padding: 0 var(--spacing-md);
 }
 
 select {
     width: 100%;
-    padding: 12px;
+    padding: 14px 16px;
     font-size: 1rem;
     background-color: var(--input-bg);
-    color: var(--text-color);
+    color: var(--text-primary);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     outline: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1em;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: box-shadow 0.2s;
 }
 
+select:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* Cards & Content */
 .workout-container {
     background-color: var(--card-bg);
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    flex-grow: 1;
-    overflow-y: auto;
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    transition: transform 0.2s;
 }
 
 h2 {
-    font-size: 1.4rem;
-    margin-bottom: 15px;
+    font-size: 1.5rem;
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-md);
     border-bottom: 1px solid var(--border-color);
-    padding-bottom: 10px;
+    color: var(--accent-color);
+    font-weight: 600;
 }
 
+/* List Items */
 ul {
     list-style: none;
-    margin-bottom: 20px;
+    margin-bottom: var(--spacing-lg);
 }
 
 li {
-    background-color: var(--input-bg);
-    margin-bottom: 10px;
-    padding: 12px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    margin-bottom: 12px;
 }
 
+.exercise-item {
+    display: flex;
+    align-items: center;
+    padding: 14px;
+    background-color: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-sm);
+    transition: background-color 0.2s;
+}
+
+.exercise-item:active {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Custom Checkbox */
+.exercise-checkbox {
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--text-secondary);
+    border-radius: 6px;
+    margin-right: 16px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.exercise-checkbox:checked {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.exercise-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 3px;
+    width: 6px;
+    height: 12px;
+    border: solid black;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.exercise-text {
+    font-size: 1.05rem;
+    color: var(--text-primary);
+    flex-grow: 1;
+    transition: color 0.2s;
+}
+
+.exercise-text.done {
+    text-decoration: line-through;
+    color: var(--text-secondary);
+}
+
+/* Inputs & Buttons */
 input[type="text"] {
     width: 100%;
-    padding: 10px;
-    background-color: var(--bg-color);
-    border: 1px solid var(--border-color);
-    color: var(--text-color);
-    border-radius: 4px;
+    padding: 12px;
+    background-color: var(--input-bg);
+    border: 1px solid transparent;
+    border-bottom: 2px solid var(--border-color);
+    color: var(--text-primary);
     font-size: 1rem;
+    border-radius: 4px 4px 0 0;
+    margin-bottom: 8px;
+    transition: border-color 0.2s;
+}
+
+input[type="text"]:focus {
+    outline: none;
+    border-bottom-color: var(--accent-color);
+    background-color: #333;
+}
+
+.title-input {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--accent-color);
+    margin-bottom: 20px;
 }
 
 button {
     cursor: pointer;
-    padding: 10px 15px;
+    padding: 12px 20px;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     font-size: 1rem;
-    font-weight: bold;
-    transition: opacity 0.2s;
+    font-weight: 600;
+    transition: transform 0.1s, opacity 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 button:active {
-    opacity: 0.8;
+    transform: scale(0.98);
 }
 
-.btn-primary {
-    background-color: var(--primary-color);
-    color: white;
+.btn-primary,
+.btn-edit {
+    background-color: var(--accent-color);
+    color: #000;
     width: 100%;
-    margin-top: 10px;
+    box-shadow: 0 4px 15px var(--accent-glow);
 }
 
 .btn-add {
-    background-color: #27ae60;
-    color: white;
-    margin-bottom: 10px;
+    background-color: var(--input-bg);
+    color: var(--text-primary);
     width: 100%;
+    border: 1px solid var(--border-color);
+    margin-bottom: 15px;
 }
 
 .btn-remove {
-    background-color: var(--accent-color);
-    color: white;
+    background-color: #FF525220;
+    /* Transparent Red */
+    color: var(--danger-color);
+    width: 36px;
+    height: 36px;
+    padding: 0;
     margin-left: 10px;
-    padding: 8px 12px;
-    font-size: 0.9rem;
+    border-radius: 50%;
 }
 
-.btn-edit {
-    background-color: var(--primary-color);
-    color: white;
-    width: 100%;
+.btn-reset {
+    background: none;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    padding: 8px 16px;
+    border-radius: 20px;
+    margin-top: 20px;
 }
 
-.edit-actions {
+.reset-day-container {
+    text-align: center;
+    margin-top: 10px;
+    margin-bottom: 20px;
+}
+
+/* Timer FAB */
+.timer-fab {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 64px;
+    height: 64px;
+    background-color: var(--card-bg);
+    border: 2px solid var(--accent-color);
+    border-radius: 50%;
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-color);
+    font-weight: bold;
+    font-size: 1.4rem;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-@media (min-width: 600px) {
-    .app-container {
-        padding-top: 40px;
-    }
+.timer-fab:active {
+    transform: scale(0.9);
+}
+
+.timer-fab.active {
+    background-color: var(--accent-color);
+    color: #000;
+    box-shadow: 0 8px 25px var(--accent-glow);
+    border-color: var(--accent-color);
+}
+
+.timer-fab svg {
+    width: 28px;
+    height: 28px;
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
 }
