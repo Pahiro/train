@@ -7,8 +7,8 @@ After=network.target
 User=root
 # The directory where you placed the app (binary + public/ + train.json)
 WorkingDirectory=/opt/train
-# The command to start the app
-ExecStart=/opt/train
+# The command to start the app (compiled binary)
+ExecStart=/opt/train/train
 Restart=always
 RestartSec=3
 

@@ -38,8 +38,8 @@ A simple, lightweight progressive web app (PWA) to plan your weekly workouts. Bu
 This app is a single binary. To deploy, simply build the binary and run it on your server, ensuring `public/` and `train.json` are in the working directory.
 
 ```bash
-go build -o workout-planner
-./workout-planner
+go build -o train
+./train
 ```
 
 ## Structure
