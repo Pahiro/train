@@ -1,0 +1,16 @@
+[Unit]
+Description=Workout Planner PWA
+After=network.target
+
+[Service]
+# Replace 'root' with your actual user if desired
+User=root
+# The directory where you placed the app (binary + public/ + train.json)
+WorkingDirectory=/opt/train
+# The command to start the app
+ExecStart=/opt/train/workout-planner
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
