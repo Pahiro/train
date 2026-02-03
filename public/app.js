@@ -10,6 +10,15 @@ const state = {
     }
 };
 
+// Helper: Get local date string YYYY-MM-DD
+function getTodayDateString() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 const dom = {
     daySelector: document.getElementById('day-selector'),
     workoutContainer: document.getElementById('workout-container'),
@@ -50,7 +59,9 @@ function migrateData() {
     // 1. String -> Object { text, done: false }
     // 2. Boolean done -> lastDone: "YYYY-MM-DD"
 
-    const today = new Date().toISOString().split('T')[0];
+    // 2. Boolean done -> lastDone: "YYYY-MM-DD"
+
+    const today = getTodayDateString();
 
     for (const day in state.data) {
         state.data[day].exercises = state.data[day].exercises.map(ex => {
@@ -85,7 +96,7 @@ function renderWorkout() {
     if (!state.data || !state.selectedDay) return;
 
     const dayData = state.data[state.selectedDay];
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDateString();
 
     let content = '';
 
@@ -207,7 +218,7 @@ window.toggleTimer = () => {
 window.toggleExercise = (index) => {
     const dayData = state.data[state.selectedDay];
     const ex = dayData.exercises[index];
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDateString();
 
     // Toggle logic: If done today, clear it. Else, set to today.
     if (ex.lastDone === today) {
