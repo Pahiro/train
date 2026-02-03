@@ -19,8 +19,8 @@ A simple, lightweight progressive web app (PWA) to plan your weekly workouts. Bu
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/Pahiro/avs.git
-    cd avs
+    git clone https://github.com/Pahiro/train.git
+    cd train
     ```
 
 2.  Run the server:
