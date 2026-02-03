@@ -103,7 +103,14 @@ function renderWorkout() {
                 </ul>
                 <div class="edit-actions">
                     <button class="btn-add" onclick="addExercise()">+ Add Exercise</button>
-                    <button class="btn-primary" onclick="saveChanges()">Save Changes</button>
+                    <!-- Save button moved to FAB -->
+                </div>
+                
+                <!-- Save FAB (Bottom Left) -->
+                <div class="fab edit-fab editing" onclick="saveChanges()" aria-label="Save Changes">
+                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
                 </div>
             </div>
         `;

@@ -125,6 +125,16 @@ ul {
 
 li {
     margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+}
+
+li input {
+    flex-grow: 1;
+    margin-bottom: 0 !important;
+    /* Override input margin */
+    border-radius: 4px;
+    /* Fix border radius since it's now inline */
 }
 
 .exercise-item {
