@@ -1,13 +1,20 @@
 const state = {
     data: null,
     selectedDay: null,
-    isEditing: false
+    isEditing: false,
+    timer: {
+        active: false,
+        time: 60,
+        defaultTime: 60,
+        interval: null
+    }
 };
 
 const dom = {
     daySelector: document.getElementById('day-selector'),
     workoutContainer: document.getElementById('workout-container'),
-    loading: document.getElementById('loading')
+    loading: document.getElementById('loading'),
+    timerFab: document.getElementById('timer-fab')
 };
 
 async function init() {
@@ -18,6 +25,9 @@ async function init() {
         // precise day selection
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         state.selectedDay = days[new Date().getDay()];
+
+        // MIGRATION: Convert string exercises to objects
+        migrateData();
 
         renderDaySelector();
         renderWorkout();
@@ -35,6 +45,18 @@ async function init() {
     }
 }
 
+function migrateData() {
+    // Ensure all exercises are objects { text, done }
+    for (const day in state.data) {
+        state.data[day].exercises = state.data[day].exercises.map(ex => {
+            if (typeof ex === 'string') {
+                return { text: ex, done: false };
+            }
+            return ex;
+        });
+    }
+}
+
 function renderDaySelector() {
     const days = Object.keys(state.data);
     dom.daySelector.innerHTML = days.map(day =>
@@ -48,6 +70,7 @@ function renderWorkout() {
     const dayData = state.data[state.selectedDay];
 
     let content = '';
+
     if (state.isEditing) {
         content += `<input type="text" id="day-title-input" value="${dayData.title}" class="title-input" aria-label="Day Title">`;
         content += `
@@ -55,7 +78,7 @@ function renderWorkout() {
                 <ul id="exercise-list">
                     ${dayData.exercises.map((ex, idx) => `
                         <li>
-                            <input type="text" value="${ex}" data-index="${idx}" class="exercise-input" aria-label="Exercise ${idx + 1}">
+                            <input type="text" value="${ex.text}" data-index="${idx}" class="exercise-input" aria-label="Exercise ${idx + 1}">
                             <button class="btn-remove" onclick="removeExercise(${idx})" aria-label="Remove exercise">×</button>
                         </li>
                     `).join('')}
@@ -70,8 +93,23 @@ function renderWorkout() {
         content += `<h2>${dayData.title}</h2>`;
         content += `
             <ul>
-                ${dayData.exercises.map(ex => `<li>${ex}</li>`).join('')}
+                ${dayData.exercises.map((ex, idx) => `
+                    <li>
+                        <div class="exercise-item">
+                            <input type="checkbox" class="exercise-checkbox" 
+                                ${ex.done ? 'checked' : ''} 
+                                onchange="toggleExercise(${idx})"
+                            >
+                            <span class="exercise-text ${ex.done ? 'done' : ''}" onclick="toggleExercise(${idx})">
+                                ${ex.text}
+                            </span>
+                        </div>
+                    </li>
+                `).join('')}
             </ul>
+            <div class="reset-day-container">
+                <button class="btn-reset" onclick="resetDay()">Reset Day's Progress</button>
+            </div>
             <button class="btn-edit" onclick="startEditing()">Edit</button>
         `;
     }
@@ -79,14 +117,77 @@ function renderWorkout() {
     dom.workoutContainer.innerHTML = content;
 }
 
-// Global handlers exposed for inline onclicks
+// Timer Logic
+window.toggleTimer = () => {
+    if (state.timer.active) {
+        // Stop timer
+        clearInterval(state.timer.interval);
+        state.timer.active = false;
+        state.timer.time = state.timer.defaultTime;
+        dom.timerFab.textContent = state.timer.defaultTime;
+        dom.timerFab.classList.remove('active');
+    } else {
+        // Start timer
+        state.timer.active = true;
+        dom.timerFab.classList.add('active');
+        state.timer.interval = setInterval(() => {
+            state.timer.time--;
+            dom.timerFab.textContent = state.timer.time;
+
+            if (state.timer.time <= 0) {
+                navigator.vibrate?.(200); // Haptic feedback
+                clearInterval(state.timer.interval);
+                state.timer.active = false;
+                state.timer.time = state.timer.defaultTime;
+                dom.timerFab.textContent = state.timer.defaultTime;
+                dom.timerFab.classList.remove('active');
+                alert('Rest Finished!');
+            }
+        }, 1000);
+    }
+};
+
+// Global handlers
+window.toggleExercise = (index) => {
+    // If called from span click, we need to toggle the checkbox manually? 
+    // Actually simpler: just invert the state and re-render or update DOM.
+    // For simplicity with this lightweight structure, let's update state and save silently.
+
+    const dayData = state.data[state.selectedDay];
+    dayData.exercises[index].done = !dayData.exercises[index].done;
+
+    // Save immediately (fire and forget)
+    fetch('/api/training', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state.data)
+    });
+
+    renderWorkout();
+};
+
+window.resetDay = () => {
+    // Removed confirm for smoother UX
+    // if (!confirm('Uncheck all exercises for today?')) return;
+
+    const dayData = state.data[state.selectedDay];
+    dayData.exercises.forEach(ex => ex.done = false);
+
+    fetch('/api/training', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state.data)
+    });
+
+    renderWorkout();
+};
+
 window.startEditing = () => {
     state.isEditing = true;
     renderWorkout();
 };
 
 window.removeExercise = (index) => {
-    // Read current values first to avoid losing unsaved edits
     updateStateFromInputs();
     state.data[state.selectedDay].exercises.splice(index, 1);
     renderWorkout();
@@ -94,14 +195,12 @@ window.removeExercise = (index) => {
 
 window.addExercise = () => {
     updateStateFromInputs();
-    state.data[state.selectedDay].exercises.push('');
+    state.data[state.selectedDay].exercises.push({ text: '', done: false });
     renderWorkout();
 };
 
 window.saveChanges = async () => {
     updateStateFromInputs();
-
-    // Optimistic UI update
     state.isEditing = false;
     renderWorkout();
 
@@ -118,7 +217,6 @@ window.saveChanges = async () => {
 };
 
 function updateStateFromInputs() {
-    // Sync current input values to state
     if (!state.isEditing) return;
 
     const titleInput = document.getElementById('day-title-input');
@@ -129,7 +227,8 @@ function updateStateFromInputs() {
     const inputs = document.querySelectorAll('.exercise-input');
     inputs.forEach(input => {
         const idx = input.dataset.index;
-        state.data[state.selectedDay].exercises[idx] = input.value;
+        // Preserve done state, only update text
+        state.data[state.selectedDay].exercises[idx].text = input.value;
     });
 }
 
