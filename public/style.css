@@ -42,7 +42,7 @@ body {
     max-width: 600px;
     padding: var(--spacing-md);
     padding-bottom: 100px;
-    /* Space for FAB */
+    /* Space for FABs */
     display: flex;
     flex-direction: column;
 }
@@ -227,8 +227,7 @@ button:active {
     transform: scale(0.98);
 }
 
-.btn-primary,
-.btn-edit {
+.btn-primary {
     background-color: var(--accent-color);
     color: #000;
     width: 100%;
@@ -254,37 +253,16 @@ button:active {
     border-radius: 50%;
 }
 
-.btn-reset {
-    background: none;
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    padding: 8px 16px;
-    border-radius: 20px;
-    margin-top: 20px;
-}
-
-.reset-day-container {
-    text-align: center;
-    margin-top: 10px;
-    margin-bottom: 20px;
-}
-
-/* Timer FAB */
-.timer-fab {
+/* Floating Action Buttons */
+.fab {
     position: fixed;
     bottom: 30px;
-    right: 30px;
     width: 64px;
     height: 64px;
-    background-color: var(--card-bg);
-    border: 2px solid var(--accent-color);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--accent-color);
-    font-weight: bold;
     font-size: 1.4rem;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
     cursor: pointer;
@@ -292,8 +270,15 @@ button:active {
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.timer-fab:active {
+.fab:active {
     transform: scale(0.9);
+}
+
+.timer-fab {
+    right: 30px;
+    background-color: var(--card-bg);
+    border: 2px solid var(--accent-color);
+    color: var(--accent-color);
 }
 
 .timer-fab.active {
@@ -309,4 +294,18 @@ button:active {
     stroke: currentColor;
     stroke-width: 2;
     fill: none;
+}
+
+.edit-fab {
+    left: 30px;
+    background-color: var(--card-bg);
+    /* Use card background for consistency */
+    color: var(--text-primary);
+    border: 2px solid var(--border-color);
+}
+
+.edit-fab.editing {
+    background-color: var(--accent-color);
+    color: #000;
+    border-color: var(--accent-color);
 }

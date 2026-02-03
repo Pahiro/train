@@ -26,7 +26,7 @@ async function init() {
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         state.selectedDay = days[new Date().getDay()];
 
-        // MIGRATION: Convert string exercises to objects
+        // MIGRATION: Convert old data formats to new schema
         migrateData();
 
         renderDaySelector();
@@ -46,12 +46,29 @@ async function init() {
 }
 
 function migrateData() {
-    // Ensure all exercises are objects { text, done }
+    // Schema Migration:
+    // 1. String -> Object { text, done: false }
+    // 2. Boolean done -> lastDone: "YYYY-MM-DD"
+
+    const today = new Date().toISOString().split('T')[0];
+
     for (const day in state.data) {
         state.data[day].exercises = state.data[day].exercises.map(ex => {
+            // Case 1: Simple string
             if (typeof ex === 'string') {
-                return { text: ex, done: false };
+                return { text: ex, lastDone: null };
             }
+
+            // Case 2: Old boolean 'done' style
+            if (ex.hasOwnProperty('done')) {
+                const newEx = {
+                    text: ex.text,
+                    lastDone: ex.done ? today : null // If it was done, assume done today for migration
+                };
+                return newEx;
+            }
+
+            // Case 3: Already has lastDone (or neither)
             return ex;
         });
     }
@@ -68,6 +85,7 @@ function renderWorkout() {
     if (!state.data || !state.selectedDay) return;
 
     const dayData = state.data[state.selectedDay];
+    const today = new Date().toISOString().split('T')[0];
 
     let content = '';
 
@@ -93,24 +111,32 @@ function renderWorkout() {
         content += `<h2>${dayData.title}</h2>`;
         content += `
             <ul>
-                ${dayData.exercises.map((ex, idx) => `
+                ${dayData.exercises.map((ex, idx) => {
+            const isDone = ex.lastDone === today;
+            return `
                     <li>
                         <div class="exercise-item">
                             <input type="checkbox" class="exercise-checkbox" 
-                                ${ex.done ? 'checked' : ''} 
+                                ${isDone ? 'checked' : ''} 
                                 onchange="toggleExercise(${idx})"
                             >
-                            <span class="exercise-text ${ex.done ? 'done' : ''}" onclick="toggleExercise(${idx})">
+                            <span class="exercise-text ${isDone ? 'done' : ''}" onclick="toggleExercise(${idx})">
                                 ${ex.text}
                             </span>
                         </div>
                     </li>
-                `).join('')}
+                `}).join('')}
             </ul>
-            <div class="reset-day-container">
-                <button class="btn-reset" onclick="resetDay()">Reset Day's Progress</button>
+        `;
+
+        // Edit FAB (Left)
+        content += `
+            <div class="fab edit-fab" onclick="startEditing()" aria-label="Edit Workout">
+                <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
             </div>
-            <button class="btn-edit" onclick="startEditing()">Edit</button>
         `;
     }
 
@@ -121,6 +147,7 @@ function renderWorkout() {
 window.toggleTimer = () => {
     const icon = document.getElementById('timer-icon');
     const text = document.getElementById('timer-text');
+    const fab = document.getElementById('timer-fab');
 
     if (state.timer.active) {
         // Stop timer
@@ -132,13 +159,13 @@ window.toggleTimer = () => {
         text.textContent = state.timer.defaultTime;
         text.style.display = 'none';
         icon.style.display = 'block';
-        dom.timerFab.classList.remove('active');
+        fab.classList.remove('active');
 
         navigator.vibrate?.(50);
     } else {
         // Start timer
         state.timer.active = true;
-        dom.timerFab.classList.add('active');
+        fab.classList.add('active');
 
         // Show text, hide icon
         icon.style.display = 'none';
@@ -161,7 +188,7 @@ window.toggleTimer = () => {
                 text.textContent = state.timer.defaultTime;
                 text.style.display = 'none';
                 icon.style.display = 'block';
-                dom.timerFab.classList.remove('active');
+                fab.classList.remove('active');
 
                 alert('Rest Finished!');
             }
@@ -172,23 +199,15 @@ window.toggleTimer = () => {
 // Global handlers
 window.toggleExercise = (index) => {
     const dayData = state.data[state.selectedDay];
-    dayData.exercises[index].done = !dayData.exercises[index].done;
+    const ex = dayData.exercises[index];
+    const today = new Date().toISOString().split('T')[0];
 
-    fetch('/api/training', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state.data)
-    });
-
-    renderWorkout();
-};
-
-window.resetDay = () => {
-    // Removed confirm for smoother UX
-    // if (!confirm('Uncheck all exercises for today?')) return;
-
-    const dayData = state.data[state.selectedDay];
-    dayData.exercises.forEach(ex => ex.done = false);
+    // Toggle logic: If done today, clear it. Else, set to today.
+    if (ex.lastDone === today) {
+        ex.lastDone = null;
+    } else {
+        ex.lastDone = today;
+    }
 
     fetch('/api/training', {
         method: 'POST',
@@ -212,7 +231,7 @@ window.removeExercise = (index) => {
 
 window.addExercise = () => {
     updateStateFromInputs();
-    state.data[state.selectedDay].exercises.push({ text: '', done: false });
+    state.data[state.selectedDay].exercises.push({ text: '', lastDone: null });
     renderWorkout();
 };
 
