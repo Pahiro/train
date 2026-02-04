@@ -319,3 +319,36 @@ button:active {
     color: #000;
     border-color: var(--accent-color);
 }
+
+/* Drag and Drop Styles */
+.draggable-item {
+    cursor: move;
+    transition: all 0.2s ease;
+}
+
+.drag-handle {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    cursor: grab;
+    margin-right: 8px;
+    user-select: none;
+    line-height: 24px;
+    text-align: center;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.draggable-item.dragging {
+    opacity: 0.5;
+    background-color: rgba(0, 229, 255, 0.1);
+}
+
+.draggable-item.drag-over {
+    border-top: 2px solid var(--accent-color);
+    margin-top: 2px;
+}

@@ -4,9 +4,12 @@ const state = {
     isEditing: false,
     timer: {
         active: false,
-        time: 60,
-        defaultTime: 60,
+        time: 0,
         interval: null
+    },
+    dragState: {
+        draggedIndex: null,
+        draggedOverIndex: null
     }
 };
 
@@ -106,7 +109,8 @@ function renderWorkout() {
             <div class="edit-mode">
                 <ul id="exercise-list">
                     ${dayData.exercises.map((ex, idx) => `
-                        <li>
+                        <li draggable="true" data-index="${idx}" class="draggable-item">
+                            <span class="drag-handle" aria-label="Drag to reorder">:</span>
                             <input type="text" value="${ex.text}" data-index="${idx}" class="exercise-input" aria-label="Exercise ${idx + 1}">
                             <button class="btn-remove" onclick="removeExercise(${idx})" aria-label="Remove exercise">×</button>
                         </li>
@@ -159,9 +163,14 @@ function renderWorkout() {
     }
 
     dom.workoutContainer.innerHTML = content;
+
+    // Attach drag-and-drop event listeners if in edit mode
+    if (state.isEditing) {
+        attachDragListeners();
+    }
 }
 
-// Timer Custom Logic
+// Timer Custom Logic - Count UP instead of down
 window.toggleTimer = () => {
     const icon = document.getElementById('timer-icon');
     const text = document.getElementById('timer-text');
@@ -171,10 +180,9 @@ window.toggleTimer = () => {
         // Stop timer
         clearInterval(state.timer.interval);
         state.timer.active = false;
-        state.timer.time = state.timer.defaultTime;
+        state.timer.time = 0;
 
         // Reset UI
-        text.textContent = state.timer.defaultTime;
         text.style.display = 'none';
         icon.style.display = 'block';
         fab.classList.remove('active');
@@ -183,36 +191,29 @@ window.toggleTimer = () => {
     } else {
         // Start timer
         state.timer.active = true;
+        state.timer.time = 0;
         fab.classList.add('active');
 
         // Show text, hide icon
         icon.style.display = 'none';
         text.style.display = 'block';
-        text.textContent = state.timer.time;
+        text.textContent = formatTime(state.timer.time);
 
         navigator.vibrate?.(50);
 
         state.timer.interval = setInterval(() => {
-            state.timer.time--;
-            text.textContent = state.timer.time;
-
-            if (state.timer.time <= 0) {
-                navigator.vibrate?.([200, 100, 200]); // Stronger feedback
-                clearInterval(state.timer.interval);
-                state.timer.active = false;
-                state.timer.time = state.timer.defaultTime;
-
-                // Reset UI
-                text.textContent = state.timer.defaultTime;
-                text.style.display = 'none';
-                icon.style.display = 'block';
-                fab.classList.remove('active');
-
-                alert('Rest Finished!');
-            }
+            state.timer.time++;
+            text.textContent = formatTime(state.timer.time);
         }, 1000);
     }
 };
+
+// Format seconds as MM:SS
+function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
 
 // Global handlers
 window.toggleExercise = (index) => {
@@ -283,6 +284,83 @@ function updateStateFromInputs() {
         const idx = input.dataset.index;
         state.data[state.selectedDay].exercises[idx].text = input.value;
     });
+}
+
+// Drag and Drop Functions
+function attachDragListeners() {
+    const items = document.querySelectorAll('.draggable-item');
+
+    items.forEach(item => {
+        item.addEventListener('dragstart', handleDragStart);
+        item.addEventListener('dragover', handleDragOver);
+        item.addEventListener('drop', handleDrop);
+        item.addEventListener('dragend', handleDragEnd);
+        item.addEventListener('dragenter', handleDragEnter);
+        item.addEventListener('dragleave', handleDragLeave);
+    });
+}
+
+function handleDragStart(e) {
+    state.dragState.draggedIndex = parseInt(e.target.dataset.index);
+    e.target.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handleDragEnter(e) {
+    const target = e.target.closest('.draggable-item');
+    if (target) {
+        target.classList.add('drag-over');
+    }
+}
+
+function handleDragLeave(e) {
+    const target = e.target.closest('.draggable-item');
+    if (target && !target.contains(e.relatedTarget)) {
+        target.classList.remove('drag-over');
+    }
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const target = e.target.closest('.draggable-item');
+    if (!target) return;
+
+    const dropIndex = parseInt(target.dataset.index);
+    const dragIndex = state.dragState.draggedIndex;
+
+    if (dragIndex !== null && dragIndex !== dropIndex) {
+        // Update state from inputs before reordering
+        updateStateFromInputs();
+
+        // Reorder the exercises array
+        const exercises = state.data[state.selectedDay].exercises;
+        const [draggedItem] = exercises.splice(dragIndex, 1);
+        exercises.splice(dropIndex, 0, draggedItem);
+
+        // Re-render
+        renderWorkout();
+    }
+
+    return false;
+}
+
+function handleDragEnd(e) {
+    e.target.classList.remove('dragging');
+
+    // Remove all drag-over classes
+    document.querySelectorAll('.drag-over').forEach(item => {
+        item.classList.remove('drag-over');
+    });
+
+    state.dragState.draggedIndex = null;
 }
 
 init();
