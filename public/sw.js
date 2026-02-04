@@ -1,4 +1,4 @@
-const CACHE_NAME = 'workout-planner-v2';
+const CACHE_NAME = 'workout-planner-v3';
 const ASSETS = [
     '/',
     '/index.html',
@@ -10,32 +10,50 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+    // Skip waiting to activate immediately
+    self.skipWaiting();
+
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => cache.addAll(ASSETS))
     );
 });
 
+self.addEventListener('activate', (event) => {
+    // Clean up old caches
+    event.waitUntil(
+        caches.keys().then(cacheNames => {
+            return Promise.all(
+                cacheNames.map(cacheName => {
+                    if (cacheName !== CACHE_NAME) {
+                        return caches.delete(cacheName);
+                    }
+                })
+            );
+        })
+    );
+    // Take control immediately
+    return self.clients.claim();
+});
+
 self.addEventListener('fetch', (event) => {
     if (event.request.method !== 'GET') return;
 
-    // API requests: Network first, fallback to cache
-    if (event.request.url.includes('/api/')) {
-        event.respondWith(
-            fetch(event.request)
-                .then(res => {
-                    const clone = res.clone();
-                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-                    return res;
-                })
-                .catch(() => caches.match(event.request))
-        );
-        return;
-    }
-
-    // Static assets: Cache first, fallback to network
+    // Network first for everything - always get fresh content
+    // Only fall back to cache if offline
     event.respondWith(
-        caches.match(event.request)
-            .then(cached => cached || fetch(event.request))
+        fetch(event.request)
+            .then(response => {
+                // Update cache with fresh content
+                const responseClone = response.clone();
+                caches.open(CACHE_NAME).then(cache => {
+                    cache.put(event.request, responseClone);
+                });
+                return response;
+            })
+            .catch(() => {
+                // Offline: fall back to cache
+                return caches.match(event.request);
+            })
     );
 });
