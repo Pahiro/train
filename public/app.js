@@ -10,6 +10,14 @@ const state = {
     dragState: {
         draggedIndex: null,
         draggedOverIndex: null
+    },
+    modal: {
+        isOpen: false,
+        exerciseIndex: null,
+        currentSession: {
+            sets: [],
+            weight: null
+        }
     }
 };
 
@@ -21,6 +29,31 @@ function getTodayDateString() {
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 }
+
+// Helper: Parse exercise text to extract details
+// Example: "Leg Press: 3x15@60" -> { name: "Leg Press", sets: 3, reps: 15, weight: 60 }
+function parseExerciseText(text) {
+    // Pattern: "Name: SxR@W" where S=sets, R=reps, W=weight
+    const weightPattern = /^(.+?):\s*(\d+)x(\d+)@(\d+(?:\.\d+)?)\s*$/i;
+    const match = text.match(weightPattern);
+
+    if (match) {
+        return {
+            type: 'weight',
+            name: match[1].trim(),
+            sets: parseInt(match[2]),
+            reps: parseInt(match[3]),
+            weight: parseFloat(match[4])
+        };
+    }
+
+    // If no match, it's a cardio/text exercise
+    return {
+        type: 'cardio',
+        name: text
+    };
+}
+
 
 const dom = {
     daySelector: document.getElementById('day-selector'),
@@ -58,35 +91,86 @@ async function init() {
 }
 
 function migrateData() {
-    // Schema Migration:
-    // 1. String -> Object { text, done: false }
+    // Enhanced Schema Migration:
+    // 1. String -> Object { text, lastDone: null }
     // 2. Boolean done -> lastDone: "YYYY-MM-DD"
-
-    // 2. Boolean done -> lastDone: "YYYY-MM-DD"
+    // 3. Detect exercise type (weight vs cardio)
+    // 4. Initialize weight tracking schema for weight exercises
 
     const today = getTodayDateString();
 
     for (const day in state.data) {
         state.data[day].exercises = state.data[day].exercises.map(ex => {
+            let baseEx;
+
             // Case 1: Simple string
             if (typeof ex === 'string') {
-                return { text: ex, lastDone: null };
+                baseEx = { text: ex, lastDone: null };
             }
-
             // Case 2: Old boolean 'done' style
-            if (ex.hasOwnProperty('done')) {
-                const newEx = {
+            else if (ex.hasOwnProperty('done')) {
+                baseEx = {
                     text: ex.text,
-                    lastDone: ex.done ? today : null // If it was done, assume done today for migration
+                    lastDone: ex.done ? today : null
                 };
-                return newEx;
+            }
+            // Case 3: Already has lastDone
+            else {
+                baseEx = ex;
             }
 
-            // Case 3: Already has lastDone (or neither)
-            return ex;
+            // If already migrated to new schema, return as-is
+            if (baseEx.type && baseEx.history !== undefined) {
+                return baseEx;
+            }
+
+            // Parse exercise text to determine type
+            const parsed = parseExerciseText(baseEx.text);
+
+            if (parsed.type === 'weight') {
+                // Initialize weight tracking schema
+                return {
+                    text: baseEx.text,
+                    type: 'weight',
+                    name: parsed.name,
+                    target: {
+                        sets: parsed.sets,
+                        reps: parsed.reps
+                    },
+                    currentWeight: parsed.weight,
+                    lastDone: baseEx.lastDone,
+                    history: baseEx.history || [],
+                    consecutiveSuccesses: baseEx.consecutiveSuccesses || 0,
+                    readyToProgress: baseEx.readyToProgress || false
+                };
+            } else {
+                // Cardio exercise - keep simple
+                return {
+                    text: baseEx.text,
+                    type: 'cardio',
+                    lastDone: baseEx.lastDone
+                };
+            }
         });
     }
+
+    // Save migrated data
+    saveData();
 }
+
+// Helper: Save data to backend
+async function saveData() {
+    try {
+        await fetch('/api/training', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(state.data)
+        });
+    } catch (err) {
+        console.error('Failed to save data:', err);
+    }
+}
+
 
 function renderDaySelector() {
     const days = Object.keys(state.data);
@@ -108,13 +192,45 @@ function renderWorkout() {
         content += `
             <div class="edit-mode">
                 <ul id="exercise-list">
-                    ${dayData.exercises.map((ex, idx) => `
-                        <li draggable="true" data-index="${idx}" class="draggable-item">
-                            <span class="drag-handle" aria-label="Drag to reorder">:</span>
-                            <input type="text" value="${ex.text}" data-index="${idx}" class="exercise-input" aria-label="Exercise ${idx + 1}">
-                            <button class="btn-remove" onclick="removeExercise(${idx})" aria-label="Remove exercise">×</button>
+                    ${dayData.exercises.map((ex, idx) => {
+            const isWeight = ex.type === 'weight';
+            return `
+                        <li draggable="true" data-index="${idx}" class="draggable-item edit-item">
+                            <div class="edit-item-header">
+                                <span class="drag-handle" aria-label="Drag to reorder">::</span>
+                                <select class="type-selector" onchange="toggleExerciseType(${idx}, this.value)">
+                                    <option value="cardio" ${!isWeight ? 'selected' : ''}>Cardio (Text)</option>
+                                    <option value="weight" ${isWeight ? 'selected' : ''}>Weight Training</option>
+                                </select>
+                                <button class="btn-remove" onclick="removeExercise(${idx})" aria-label="Remove exercise">×</button>
+                            </div>
+
+                            <div class="edit-item-body">
+                                ${isWeight ? `
+                                    <div class="edit-field">
+                                        <label>Exercise Name</label>
+                                        <input type="text" class="edit-input ex-name" value="${ex.name || ''}" placeholder="e.g. Leg Press" data-index="${idx}">
+                                    </div>
+                                    <div class="edit-weight-grid">
+                                        <div class="edit-field">
+                                            <label>Sets</label>
+                                            <input type="number" class="edit-input ex-sets" value="${ex.target?.sets || 3}" placeholder="3" data-index="${idx}">
+                                        </div>
+                                        <div class="edit-field">
+                                            <label>Reps</label>
+                                            <input type="number" class="edit-input ex-reps" value="${ex.target?.reps || 10}" placeholder="10" data-index="${idx}">
+                                        </div>
+                                        <div class="edit-field">
+                                            <label>Weight (kg)</label>
+                                            <input type="number" class="edit-input ex-weight" value="${ex.currentWeight || 0}" step="0.5" placeholder="0" data-index="${idx}">
+                                        </div>
+                                    </div>
+                                ` : `
+                                    <input type="text" value="${ex.text}" data-index="${idx}" class="exercise-input" aria-label="Exercise Text" placeholder="e.g. 30 mins treadmill">
+                                `}
+                            </div>
                         </li>
-                    `).join('')}
+                    `}).join('')}
                 </ul>
                 <div class="edit-actions">
                     <button class="btn-add" onclick="addExercise()">+ Add Exercise</button>
@@ -135,7 +251,35 @@ function renderWorkout() {
             <ul>
                 ${dayData.exercises.map((ex, idx) => {
             const isDone = ex.lastDone === today;
-            return `
+
+            // Weight training exercise - clickable for detail view
+            if (ex.type === 'weight') {
+                return `
+                    <li>
+                        <div class="exercise-item weight-exercise" onclick="openExerciseDetail(${idx})">
+                            <input type="checkbox" class="exercise-checkbox" 
+                                ${isDone ? 'checked' : ''} 
+                                onclick="event.stopPropagation(); toggleExercise(${idx})"
+                            >
+                            <div class="exercise-content">
+                                <span class="exercise-text ${isDone ? 'done' : ''}">
+                                    ${ex.name}
+                                </span>
+                                <span class="exercise-meta">
+                                    ${ex.target.sets}×${ex.target.reps} @ ${ex.currentWeight}kg
+                                    ${ex.readyToProgress ? '<span class="progress-badge">📈 Ready!</span>' : ''}
+                                </span>
+                            </div>
+                            <svg class="chevron-icon" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </div>
+                    </li>
+                `;
+            }
+            // Cardio exercise - simple checkbox
+            else {
+                return `
                     <li>
                         <div class="exercise-item">
                             <input type="checkbox" class="exercise-checkbox" 
@@ -147,9 +291,12 @@ function renderWorkout() {
                             </span>
                         </div>
                     </li>
-                `}).join('')}
+                `;
+            }
+        }).join('')}
             </ul>
         `;
+
 
         // Edit FAB (Left)
         content += `
@@ -168,7 +315,252 @@ function renderWorkout() {
     if (state.isEditing) {
         attachDragListeners();
     }
+
+    // Render modal if open
+    if (state.modal.isOpen) {
+        renderExerciseModal();
+    }
 }
+
+// Render Exercise Detail Modal
+function renderExerciseModal() {
+    const exerciseIndex = state.modal.exerciseIndex;
+    const exercise = state.data[state.selectedDay].exercises[exerciseIndex];
+    const today = getTodayDateString();
+
+    // Initialize current session if not set
+    if (state.modal.currentSession.sets.length === 0) {
+        state.modal.currentSession.sets = new Array(exercise.target.sets).fill('');
+        state.modal.currentSession.weight = exercise.currentWeight;
+    }
+
+    // Calculate if session is complete
+    const allSetsComplete = state.modal.currentSession.sets.every((reps, idx) => {
+        const repsNum = parseInt(reps);
+        return !isNaN(repsNum) && repsNum >= exercise.target.reps;
+    });
+
+    // Calculate current volume
+    const currentVolume = state.modal.currentSession.sets.reduce((sum, reps) => {
+        const repsNum = parseInt(reps) || 0;
+        return sum + (repsNum * state.modal.currentSession.weight);
+    }, 0);
+
+    // Get last 10 history entries for graph
+    const historyForGraph = exercise.history.slice(-10);
+
+    const modalHTML = `
+        <div class="modal-overlay" onclick="closeExerciseDetail()">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h2>${exercise.name}</h2>
+                    <button class="modal-close" onclick="closeExerciseDetail()" aria-label="Close">×</button>
+                </div>
+                
+                <div class="modal-body">
+                    <!-- Weight Control -->
+                    <div class="weight-section">
+                        <label>Current Weight</label>
+                        <div class="weight-control">
+                            <button class="weight-btn" onclick="adjustWeight(-0.5)">-</button>
+                            <span class="weight-display">${state.modal.currentSession.weight} kg</span>
+                            <button class="weight-btn" onclick="adjustWeight(0.5)">+</button>
+                        </div>
+                        <div class="target-display">Target: ${exercise.target.sets}×${exercise.target.reps}</div>
+                    </div>
+                    
+                    <!-- Progression Status -->
+                    ${exercise.readyToProgress ? `
+                        <div class="progression-alert">
+                            <span class="progress-icon">🎯</span>
+                            <div>
+                                <strong>Ready to increase weight!</strong>
+                                <p>${exercise.consecutiveSuccesses} consecutive successful sessions</p>
+                            </div>
+                        </div>
+                    ` : exercise.consecutiveSuccesses > 0 ? `
+                        <div class="progression-info">
+                            <span>${exercise.consecutiveSuccesses}/${3} successful sessions</span>
+                        </div>
+                    ` : ''}
+                    
+                    <!-- Set Tracker -->
+                    <div class="set-tracker-section">
+                        <label>Today's Sets</label>
+                        <div class="set-tracker">
+                            ${state.modal.currentSession.sets.map((_, idx) => `
+                                <div class="set-input-group">
+                                    <label>Set ${idx + 1}</label>
+                                    <div class="set-input-controls">
+                                        <button class="set-adjust-btn" onclick="adjustSetReps(${idx}, -1)">-</button>
+                                        <input
+                                            type="number"
+                                            class="set-input"
+                                            placeholder="${exercise.target.reps}"
+                                            value="${state.modal.currentSession.sets[idx]}"
+                                            oninput="updateSetReps(${idx}, this.value)"
+                                            onfocus="autoFillTargetReps(${idx}, ${exercise.target.reps})"
+                                            min="0"
+                                            max="99"
+                                        >
+                                        <button class="set-adjust-btn" onclick="adjustSetReps(${idx}, 1)">+</button>
+                                    </div>
+                                    <span class="reps-label">reps</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <div class="session-stats">
+                            <div class="stat">
+                                <span class="stat-label">Volume</span>
+                                <span class="stat-value">${currentVolume} kg</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Status</span>
+                                <span class="stat-value ${allSetsComplete ? 'success' : 'incomplete'}">
+                                    ${allSetsComplete ? '✓ Complete' : 'Incomplete'}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <button class="btn-primary btn-complete" onclick="completeExerciseSession()">
+                            Complete Session
+                        </button>
+                    </div>
+                    
+                    <!-- History Section -->
+                    ${exercise.history.length > 0 ? `
+                        <div class="history-section">
+                            <h3>History</h3>
+                            
+                            <!-- Weight Progression Graph -->
+                            <div class="graph-container">
+                                <canvas id="weight-graph" width="400" height="200"></canvas>
+                            </div>
+                            
+                            <!-- Recent Sessions -->
+                            <div class="history-list">
+                                ${exercise.history.slice(-5).reverse().map(session => `
+                                    <div class="history-card ${session.completed ? 'completed' : 'incomplete'}">
+                                        <div class="history-header">
+                                            <span class="history-date">${session.date}</span>
+                                            <span class="history-status">${session.completed ? '✓' : '✗'}</span>
+                                        </div>
+                                        <div class="history-details">
+                                            <span>${session.weight}kg</span>
+                                            <span class="history-sets">${session.sets.join(', ')} reps</span>
+                                            <span class="history-volume">${session.volume}kg total</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : '<div class="no-history">No history yet. Complete your first session!</div>'}
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Insert modal into DOM
+    let modalContainer = document.getElementById('exercise-modal');
+    if (!modalContainer) {
+        modalContainer = document.createElement('div');
+        modalContainer.id = 'exercise-modal';
+        document.body.appendChild(modalContainer);
+    }
+    modalContainer.innerHTML = modalHTML;
+
+    // Render graph if there's history
+    if (historyForGraph.length > 0) {
+        setTimeout(() => renderWeightGraph(historyForGraph), 50);
+    }
+}
+
+// Render weight progression graph
+function renderWeightGraph(history) {
+    const canvas = document.getElementById('weight-graph');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    const padding = 40;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Get data points
+    const weights = history.map(h => h.weight);
+    const dates = history.map(h => h.date);
+    const minWeight = Math.min(...weights) - 5;
+    const maxWeight = Math.max(...weights) + 5;
+
+    // Draw axes
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, height - padding);
+    ctx.lineTo(width - padding, height - padding);
+    ctx.stroke();
+
+    // Draw grid lines
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+        const y = padding + (height - 2 * padding) * i / 4;
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(width - padding, y);
+        ctx.stroke();
+    }
+
+    // Draw data line
+    ctx.strokeStyle = '#00E5FF';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+
+    history.forEach((h, idx) => {
+        const x = padding + (width - 2 * padding) * idx / (history.length - 1 || 1);
+        const y = height - padding - ((h.weight - minWeight) / (maxWeight - minWeight)) * (height - 2 * padding);
+
+        if (idx === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    });
+    ctx.stroke();
+
+    // Draw data points
+    ctx.fillStyle = '#00E5FF';
+    history.forEach((h, idx) => {
+        const x = padding + (width - 2 * padding) * idx / (history.length - 1 || 1);
+        const y = height - padding - ((h.weight - minWeight) / (maxWeight - minWeight)) * (height - 2 * padding);
+
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Draw weight label
+        ctx.fillStyle = '#FFF';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${h.weight}`, x, y - 10);
+        ctx.fillStyle = '#00E5FF';
+    });
+
+    // Draw y-axis labels
+    ctx.fillStyle = '#AAA';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= 4; i++) {
+        const weight = minWeight + (maxWeight - minWeight) * (4 - i) / 4;
+        const y = padding + (height - 2 * padding) * i / 4;
+        ctx.fillText(weight.toFixed(0), padding - 10, y + 5);
+    }
+}
+
 
 // Timer Custom Logic - Count UP instead of down
 window.toggleTimer = () => {
@@ -214,6 +606,196 @@ function formatTime(seconds) {
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
+
+// Modal Control Functions
+window.openExerciseDetail = (index) => {
+    state.modal.isOpen = true;
+    state.modal.exerciseIndex = index;
+    state.modal.currentSession.sets = [];
+    state.modal.currentSession.weight = null;
+    renderWorkout();
+};
+
+window.closeExerciseDetail = () => {
+    state.modal.isOpen = false;
+    state.modal.exerciseIndex = null;
+    state.modal.currentSession.sets = [];
+    state.modal.currentSession.weight = null;
+
+    // Remove modal from DOM
+    const modalContainer = document.getElementById('exercise-modal');
+    if (modalContainer) {
+        modalContainer.remove();
+    }
+};
+
+window.adjustWeight = (delta) => {
+    state.modal.currentSession.weight = Math.max(0, state.modal.currentSession.weight + delta);
+
+    // Update the weight display without full re-render
+    const weightDisplay = document.querySelector('.weight-display');
+    if (weightDisplay) {
+        weightDisplay.textContent = `${state.modal.currentSession.weight} kg`;
+    }
+
+    // Recalculate and update volume
+    const exerciseIndex = state.modal.exerciseIndex;
+    const exercise = state.data[state.selectedDay].exercises[exerciseIndex];
+
+    const currentVolume = state.modal.currentSession.sets.reduce((sum, reps) => {
+        const repsNum = parseInt(reps) || 0;
+        return sum + (repsNum * state.modal.currentSession.weight);
+    }, 0);
+
+    const volumeElement = document.querySelector('.stat-value');
+    if (volumeElement) {
+        volumeElement.textContent = `${currentVolume} kg`;
+    }
+
+    // Update the exercise's current weight for persistence
+    const exerciseObj = state.data[state.selectedDay].exercises[exerciseIndex];
+    exerciseObj.currentWeight = state.modal.currentSession.weight;
+    exerciseObj.text = `${exerciseObj.name}: ${exerciseObj.target.sets}x${exerciseObj.target.reps}@${exerciseObj.currentWeight}`;
+    saveData();
+};
+
+window.updateSetReps = (setIndex, value) => {
+    state.modal.currentSession.sets[setIndex] = value;
+
+    // Update stats without full re-render to preserve input focus
+    const exerciseIndex = state.modal.exerciseIndex;
+    const exercise = state.data[state.selectedDay].exercises[exerciseIndex];
+
+    // Calculate if session is complete
+    const allSetsComplete = state.modal.currentSession.sets.every((reps) => {
+        const repsNum = parseInt(reps);
+        return !isNaN(repsNum) && repsNum >= exercise.target.reps;
+    });
+
+    // Calculate current volume
+    const currentVolume = state.modal.currentSession.sets.reduce((sum, reps) => {
+        const repsNum = parseInt(reps) || 0;
+        return sum + (repsNum * state.modal.currentSession.weight);
+    }, 0);
+
+    // Update volume display
+    const volumeElement = document.querySelector('.stat-value');
+    if (volumeElement) {
+        volumeElement.textContent = `${currentVolume} kg`;
+    }
+
+    // Update status display
+    const statusElement = document.querySelectorAll('.stat-value')[1];
+    if (statusElement) {
+        statusElement.textContent = allSetsComplete ? '✓ Complete' : 'Incomplete';
+        statusElement.className = 'stat-value ' + (allSetsComplete ? 'success' : 'incomplete');
+    }
+};
+
+window.autoFillTargetReps = (setIndex, targetReps) => {
+    const input = document.querySelectorAll('.set-input')[setIndex];
+    if (input && (!input.value || input.value === '')) {
+        input.value = targetReps;
+        state.modal.currentSession.sets[setIndex] = targetReps.toString();
+        updateSetReps(setIndex, targetReps.toString());
+    }
+};
+
+window.adjustSetReps = (setIndex, delta) => {
+    const input = document.querySelectorAll('.set-input')[setIndex];
+    const exerciseIndex = state.modal.exerciseIndex;
+    const exercise = state.data[state.selectedDay].exercises[exerciseIndex];
+
+    // If field is empty, start from target value
+    let currentValue;
+    if (!input.value || input.value === '') {
+        currentValue = exercise.target.reps;
+    } else {
+        currentValue = parseInt(input.value);
+    }
+
+    const newValue = Math.max(0, Math.min(99, currentValue + delta));
+    input.value = newValue;
+    updateSetReps(setIndex, newValue.toString());
+};
+
+window.completeExerciseSession = () => {
+    const exerciseIndex = state.modal.exerciseIndex;
+    const exercise = state.data[state.selectedDay].exercises[exerciseIndex];
+    const today = getTodayDateString();
+
+    // Validate that all sets have values
+    const allSetsEntered = state.modal.currentSession.sets.every(reps => {
+        const repsNum = parseInt(reps);
+        return !isNaN(repsNum) && repsNum >= 0;
+    });
+
+    if (!allSetsEntered) {
+        alert('Please enter reps for all sets before completing the session.');
+        return;
+    }
+
+    // Convert sets to numbers
+    const setsCompleted = state.modal.currentSession.sets.map(r => parseInt(r));
+
+    // Check if session was successful (all sets met target)
+    const isSuccessful = setsCompleted.every(reps => reps >= exercise.target.reps);
+
+    // Calculate volume
+    const volume = setsCompleted.reduce((sum, reps) => sum + reps, 0) * state.modal.currentSession.weight;
+
+    // Create history entry
+    const historyEntry = {
+        date: today,
+        weight: state.modal.currentSession.weight,
+        sets: setsCompleted,
+        completed: isSuccessful,
+        volume: volume
+    };
+
+    // Add to history
+    exercise.history.push(historyEntry);
+
+    // Update current weight if changed
+    exercise.currentWeight = state.modal.currentSession.weight;
+
+    // Update text to reflect new weight
+    exercise.text = `${exercise.name}: ${exercise.target.sets}x${exercise.target.reps}@${exercise.currentWeight}`;
+
+    // Update lastDone
+    exercise.lastDone = today;
+
+    // Update consecutive successes and progression status
+    if (isSuccessful) {
+        exercise.consecutiveSuccesses++;
+
+        // Check if ready to progress (3+ consecutive successes)
+        if (exercise.consecutiveSuccesses >= 3) {
+            exercise.readyToProgress = true;
+        }
+    } else {
+        exercise.consecutiveSuccesses = 0;
+        exercise.readyToProgress = false;
+    }
+
+    // If weight was increased, reset progression tracking
+    const lastHistoryWeight = exercise.history.length > 1 ? exercise.history[exercise.history.length - 2].weight : 0;
+    if (state.modal.currentSession.weight > lastHistoryWeight) {
+        exercise.consecutiveSuccesses = isSuccessful ? 1 : 0;
+        exercise.readyToProgress = false;
+    }
+
+    // Save data
+    saveData();
+
+    // Close modal and refresh
+    closeExerciseDetail();
+    renderWorkout();
+
+    // Vibrate feedback
+    navigator.vibrate?.([50, 100, 50]);
+};
+
 
 // Global handlers
 window.toggleExercise = (index) => {
@@ -271,6 +853,27 @@ window.saveChanges = async () => {
     }
 };
 
+window.toggleExerciseType = (index, newType) => {
+    updateStateFromInputs();
+
+    const ex = state.data[state.selectedDay].exercises[index];
+    ex.type = newType;
+
+    if (newType === 'weight') {
+        // Initialize defaults if missing
+        if (!ex.target) ex.target = { sets: 3, reps: 10 };
+        if (!ex.currentWeight) ex.currentWeight = 0;
+        if (!ex.name) ex.name = ex.text;
+        if (!ex.history) ex.history = [];
+    } else {
+        // Switching back to cardio/text
+        // Ensure text field is populated (name usually holds the text for weight exercises)
+        if (ex.name && !ex.text) ex.text = ex.name;
+    }
+
+    renderWorkout();
+};
+
 function updateStateFromInputs() {
     if (!state.isEditing) return;
 
@@ -279,10 +882,37 @@ function updateStateFromInputs() {
         state.data[state.selectedDay].title = titleInput.value;
     }
 
-    const inputs = document.querySelectorAll('.exercise-input');
-    inputs.forEach(input => {
-        const idx = input.dataset.index;
-        state.data[state.selectedDay].exercises[idx].text = input.value;
+    // We need to iterate over the current exercises to find their corresponding inputs
+    const exercises = state.data[state.selectedDay].exercises;
+
+    exercises.forEach((ex, idx) => {
+        // Check if we have weight inputs for this index
+        const nameInput = document.querySelector(`.ex-name[data-index="${idx}"]`);
+
+        if (nameInput) {
+            // It's in weight mode
+            const setsInput = document.querySelector(`.ex-sets[data-index="${idx}"]`);
+            const repsInput = document.querySelector(`.ex-reps[data-index="${idx}"]`);
+            const weightInput = document.querySelector(`.ex-weight[data-index="${idx}"]`);
+
+            ex.name = nameInput.value;
+            ex.target = {
+                sets: parseInt(setsInput.value) || 0,
+                reps: parseInt(repsInput.value) || 0
+            };
+            ex.currentWeight = parseFloat(weightInput.value) || 0;
+            ex.type = 'weight';
+
+            // Sync text field for compatibility
+            ex.text = `${ex.name}: ${ex.target.sets}x${ex.target.reps}@${ex.currentWeight}`;
+        } else {
+            // It's in cardio/text mode
+            const textInput = document.querySelector(`.exercise-input[data-index="${idx}"]`);
+            if (textInput) {
+                ex.text = textInput.value;
+                ex.type = 'cardio';
+            }
+        }
     });
 }
 
