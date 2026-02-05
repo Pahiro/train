@@ -670,8 +670,8 @@ button:active {
 }
 
 .set-tracker {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 12px;
 }
 
@@ -889,10 +889,6 @@ button:active {
     .modal-content {
         max-height: 95vh;
         border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    }
-
-    .set-tracker {
-        grid-template-columns: repeat(3, 1fr);
     }
 
     .weight-display {
