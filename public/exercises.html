@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exercise Library - Workout Planner</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <meta name="theme-color" content="#121212">
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <div id="loading" role="status" aria-live="polite">Loading...</div>
+
+    <header role="banner">
+        <div class="header-content">
+            <h1>Exercise Library</h1>
+        </div>
+        <nav class="header-nav">
+            <a href="/" class="nav-link">Workout</a>
+            <a href="/exercises.html" class="nav-link active">Exercises</a>
+        </nav>
+    </header>
+
+    <main class="exercises-container" id="main-content" role="main" aria-label="Exercise library">
+        <div class="exercises-header">
+            <button id="add-exercise-btn" class="btn btn-primary">
+                <span class="btn-icon">+</span> Add Exercise
+            </button>
+        </div>
+
+        <div class="exercises-filters">
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Search exercises..." autocomplete="off">
+                <span class="search-icon">🔍</span>
+            </div>
+
+            <div class="filter-group">
+                <select id="type-filter" class="filter-select">
+                    <option value="">All Types</option>
+                    <option value="weight">Weight</option>
+                    <option value="bodyweight">Bodyweight</option>
+                    <option value="cardio">Cardio</option>
+                </select>
+
+                <select id="category-filter" class="filter-select">
+                    <option value="">All Categories</option>
+                    <option value="Legs-Push">Legs-Push</option>
+                    <option value="Legs-Pull">Legs-Pull</option>
+                    <option value="Arms-Push">Arms-Push</option>
+                    <option value="Arms-Pull">Arms-Pull</option>
+                    <option value="Core-Push">Core-Push</option>
+                    <option value="Core-Pull">Core-Pull</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="exercises-list" class="exercises-grid">
+            <!-- Exercise cards will be inserted here -->
+        </div>
+
+        <div id="empty-state" class="empty-state" style="display: none;">
+            <p>No exercises found. Try adjusting your filters or create a new exercise.</p>
+        </div>
+    </main>
+
+    <!-- Exercise Modal -->
+    <div id="exercise-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Add Exercise</h2>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="exercise-form">
+                    <div class="form-group">
+                        <label for="exercise-name">Exercise Name *</label>
+                        <input type="text" id="exercise-name" required placeholder="e.g., Leg Press">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="exercise-type">Type *</label>
+                        <select id="exercise-type" required>
+                            <option value="">Select type...</option>
+                            <option value="weight">Weight</option>
+                            <option value="bodyweight">Bodyweight</option>
+                            <option value="cardio">Cardio</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="exercise-category">Category</label>
+                        <select id="exercise-category">
+                            <option value="">None</option>
+                            <option value="Legs-Push">Legs-Push</option>
+                            <option value="Legs-Pull">Legs-Pull</option>
+                            <option value="Arms-Push">Arms-Push</option>
+                            <option value="Arms-Pull">Arms-Pull</option>
+                            <option value="Core-Push">Core-Push</option>
+                            <option value="Core-Pull">Core-Pull</option>
+                        </select>
+                        <small class="form-hint">Categories help organize exercises by muscle group and movement pattern</small>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-btn">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="save-btn">Save Exercise</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal" style="display: none;">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Delete Exercise</h2>
+                <button class="modal-close" id="delete-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="delete-message">Are you sure you want to delete this exercise?</p>
+                <p class="warning-text">This will remove it from all routines and delete all history.</p>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="delete-cancel-btn">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="delete-confirm-btn">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="exercises.js"></script>
+</body>
+</html>

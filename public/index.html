@@ -13,9 +13,16 @@
 </head>
 
 <body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
     <div class="app-container">
-        <header>
-            <h1>Workout Planner</h1>
+        <header role="banner">
+            <div class="header-content">
+                <h1>Workout Planner</h1>
+            </div>
+            <nav class="header-nav">
+                <a href="/" class="nav-link active">Workout</a>
+                <a href="/exercises.html" class="nav-link">Exercises</a>
+            </nav>
             <div class="day-selector-container">
                 <select id="day-selector" aria-label="Select Day">
                     <!-- Options populated by JS -->
@@ -23,7 +30,7 @@
             </div>
         </header>
 
-        <main id="workout-container" class="workout-container">
+        <main id="workout-container" class="workout-container" role="main" aria-label="Workout content">
             <!-- Content populated by JS -->
             <div id="loading">Loading...</div>
         </main>

@@ -1,54 +1,74 @@
-# Workout Planner 🏋️‍♂️
+# Workout Planner - SQLite Edition
 
-A simple, lightweight progressive web app (PWA) to plan your weekly workouts. Built with Go and Vanilla JS.
+A progressive web app for tracking workouts with exercise library management, global history tracking, and PR/PB visualization.
+
+## Architecture
+
+### Backend (Go)
+- **Database**: SQLite with 5 tables
+- **API**: RESTful endpoints for CRUD operations
+- **Server**: Simple HTTP server on port 3001
+
+### Frontend (Vanilla JS)
+- **Pages**:
+  - `index.html` - Daily workout view
+  - `exercises.html` - Exercise library management
+- **PWA**: Service worker with network-first caching
+- **UI**: Dark theme, mobile-responsive
+
+## Database Schema
+
+### Tables
+
+**exercises** - Master exercise library
+- id, name, type (cardio/weight/bodyweight), category, timestamps
+
+**routines** - Exercises scheduled by day
+- id, exercise_id (FK), day_of_week, order_index, targets (sets/reps/weight), notes
+
+**history** - Global workout sessions
+- id, exercise_id (FK), session_date, weight, sets_completed (JSON), completed, volume, is_pr, notes
+
+**exercise_progression** - Current weight and progression tracking
+- exercise_id (PK), current_weight, consecutive_successes, ready_to_progress, last_done
+
+**day_titles** - Custom day names
+- day_of_week (PK), title
 
 ## Features
 
-- **Weekly Schedule**: View and manage workouts for each day of the week.
-- **Edit Mode**: Customize titles and exercises for any day.
-- **PWA Ready**: Installable on mobile and desktop, works offline.
-- **Dark Mode**: Sleek, battery-saving dark interface.
-- **Data Persistence**: Autosaves changes to `train.json`.
+### Exercise Library
+- Search and filter exercises by type and category
+- CRUD operations with validation
+- Categories: Legs-Push, Legs-Pull, Arms-Push, Arms-Pull, Core-Push, Core-Pull
 
-## Quick Start
+### Routine Builder
+- Day-based workout scheduling
+- Add exercises from library with search
+- Drag-and-drop reordering
+- Edit targets (sets, reps, weight, notes)
 
-### Prerequisites
-- [Go](https://go.dev/dl/) installed (1.16+).
+### Workout Tracking
+- Toggle done/undone status
+- Weight exercise detail modal
+- Set-by-set rep tracking
+- Progression tracking (3 consecutive successes = ready to progress)
 
-### Running Locally
+### History & PRs
+- Global history across all days
+- Weight progression graphs (last 20 sessions)
+- PR/PB line on graphs (red dashed)
+- PR badges on historical sessions
 
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/Pahiro/train.git
-    cd train
-    ```
+## Development
 
-2.  Run the server:
-    ```bash
-    go run main.go
-    ```
-
-3.  Open your browser to:
-    ```
-    http://localhost:3001
-    ```
-
-## Deploying
-
-This app is a single binary. To deploy, simply build the binary and run it on your server, ensuring `public/` and `train.json` are in the working directory.
-
+### Build & Run
 ```bash
 go build -o train
 ./train
 ```
 
-## Structure
+Server runs on http://localhost:3001
 
-- `main.go`: Simple HTTP server (API + Static file serving).
-- `public/`: Frontend assets (HTML, CSS, JS, Manifest).
-- `train.json`: Database file (JSON format).
-
-## Tech Stack
-
-- **Backend**: Go (Standard Library)
-- **Frontend**: HTML5, CSS3, Vanilla JavaScript
+### Database Migration
+On first run, automatically migrates from train.json to train.db

@@ -1,9 +1,11 @@
-const CACHE_NAME = 'workout-planner-v7';
+const CACHE_NAME = 'workout-planner-v8';
 const ASSETS = [
     '/',
     '/index.html',
+    '/exercises.html',
     '/style.css',
     '/app.js',
+    '/exercises.js',
     '/manifest.json',
     '/icons/icon-192.png',
     '/icons/icon-512.png'
@@ -37,7 +39,9 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+    // Only handle GET requests for http/https URLs
     if (event.request.method !== 'GET') return;
+    if (!event.request.url.startsWith('http://') && !event.request.url.startsWith('https://')) return;
 
     // Network first for everything - always get fresh content
     // Only fall back to cache if offline

@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"os"
 	"sync"
+
+	"train/db"
+	"train/handlers"
 )
 
 const (
@@ -16,16 +19,43 @@ const (
 
 type Server struct {
 	mu sync.Mutex
+	db *db.DB
 }
 
 func main() {
-	server := &Server{}
+	// Check if migration is needed
+	if db.ShouldMigrate() {
+		log.Println("Database not found. Starting migration from train.json...")
+		if err := db.Migrate(); err != nil {
+			log.Fatalf("Migration failed: %v", err)
+		}
+		log.Println("Migration completed successfully!")
+	}
 
+	// Open database connection
+	database, err := db.Open()
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+	defer database.Close()
+
+	server := &Server{db: database}
+
+	// Register handlers
 	http.Handle("/", http.FileServer(http.Dir("./public")))
 	http.HandleFunc("/api/training", server.handleTraining)
 
+	// New API endpoints
+	http.Handle("/api/exercises", &handlers.ExercisesHandler{DB: database})
+	http.Handle("/api/exercises/", &handlers.ExercisesHandler{DB: database})
+	http.Handle("/api/routines", &handlers.RoutinesHandler{DB: database})
+	http.Handle("/api/routines/", &handlers.RoutinesHandler{DB: database})
+	http.Handle("/api/history", &handlers.HistoryHandler{DB: database})
+	http.Handle("/api/history/", &handlers.HistoryHandler{DB: database})
+	http.Handle("/api/days/", &handlers.DaysHandler{DB: database})
+
 	log.Printf("Server listening on http://localhost%s", port)
-	err := http.ListenAndServe(port, nil)
+	err = http.ListenAndServe(port, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
