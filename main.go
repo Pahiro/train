@@ -53,6 +53,10 @@ func main() {
 	http.Handle("/api/history", &handlers.HistoryHandler{DB: database})
 	http.Handle("/api/history/", &handlers.HistoryHandler{DB: database})
 	http.Handle("/api/days/", &handlers.DaysHandler{DB: database})
+	http.Handle("/api/metrics", &handlers.MetricsHandler{DB: database})
+	http.Handle("/api/metrics/", &handlers.MetricsHandler{DB: database})
+	http.Handle("/api/metric-entries", &handlers.MetricEntriesHandler{DB: database})
+	http.Handle("/api/metric-entries/", &handlers.MetricEntriesHandler{DB: database})
 
 	log.Printf("Server listening on http://localhost%s", port)
 	err = http.ListenAndServe(port, nil)
