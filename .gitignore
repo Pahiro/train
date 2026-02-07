@@ -1,1 +1,5 @@
 /train
+*.db
+*.json
+!package.json
+!package-lock.json

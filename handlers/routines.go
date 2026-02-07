@@ -195,10 +195,20 @@ func (h *RoutinesHandler) createRoutine(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Auto-calculate order_index to avoid conflicts
+	// Get the max order_index for this day and add 1
+	var maxOrder int
+	err := h.DB.QueryRow("SELECT COALESCE(MAX(order_index), -1) FROM routines WHERE day_of_week = ?", req.DayOfWeek).Scan(&maxOrder)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get max order_index: %v", err), http.StatusInternalServerError)
+		return
+	}
+	orderIndex := maxOrder + 1
+
 	id, err := h.DB.CreateRoutine(
 		req.ExerciseID,
 		req.DayOfWeek,
-		req.OrderIndex,
+		orderIndex,
 		req.TargetSets,
 		req.TargetReps,
 		req.TargetWeight,

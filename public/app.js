@@ -445,90 +445,7 @@ function renderExerciseModal() {
 }
 
 // Render weight progression graph
-function renderWeightGraph(history) {
-    const canvas = document.getElementById('weight-graph');
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    const padding = 40;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-
-    // Get data points
-    const weights = history.map(h => h.weight);
-    const dates = history.map(h => h.date);
-    const minWeight = Math.min(...weights) - 5;
-    const maxWeight = Math.max(...weights) + 5;
-
-    // Draw axes
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(padding, padding);
-    ctx.lineTo(padding, height - padding);
-    ctx.lineTo(width - padding, height - padding);
-    ctx.stroke();
-
-    // Draw grid lines
-    ctx.strokeStyle = '#222';
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 4; i++) {
-        const y = padding + (height - 2 * padding) * i / 4;
-        ctx.beginPath();
-        ctx.moveTo(padding, y);
-        ctx.lineTo(width - padding, y);
-        ctx.stroke();
-    }
-
-    // Draw data line
-    ctx.strokeStyle = '#00E5FF';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-
-    history.forEach((h, idx) => {
-        const x = padding + (width - 2 * padding) * idx / (history.length - 1 || 1);
-        const y = height - padding - ((h.weight - minWeight) / (maxWeight - minWeight)) * (height - 2 * padding);
-
-        if (idx === 0) {
-            ctx.moveTo(x, y);
-        } else {
-            ctx.lineTo(x, y);
-        }
-    });
-    ctx.stroke();
-
-    // Draw data points
-    ctx.fillStyle = '#00E5FF';
-    history.forEach((h, idx) => {
-        const x = padding + (width - 2 * padding) * idx / (history.length - 1 || 1);
-        const y = height - padding - ((h.weight - minWeight) / (maxWeight - minWeight)) * (height - 2 * padding);
-
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, 2 * Math.PI);
-        ctx.fill();
-
-        // Draw weight label
-        ctx.fillStyle = '#FFF';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${h.weight}`, x, y - 10);
-        ctx.fillStyle = '#00E5FF';
-    });
-
-    // Draw y-axis labels
-    ctx.fillStyle = '#AAA';
-    ctx.font = '12px sans-serif';
-    ctx.textAlign = 'right';
-    for (let i = 0; i <= 4; i++) {
-        const weight = minWeight + (maxWeight - minWeight) * (4 - i) / 4;
-        const y = padding + (height - 2 * padding) * i / 4;
-        ctx.fillText(weight.toFixed(0), padding - 10, y + 5);
-    }
-}
-
+// Old renderWeightGraph removed - using updated version below with PR support and single-point fix
 
 // Timer Custom Logic - Count UP instead of down
 window.toggleTimer = () => {
@@ -1272,8 +1189,8 @@ function renderWeightGraph(history, pr) {
         maxWeight = Math.max(maxWeight, pr.weight);
     }
 
-    // Add padding to range
-    const range = maxWeight - minWeight;
+    // Add padding to range (use minimum range of 10 for single data points)
+    const range = maxWeight - minWeight || 10;
     minWeight = Math.max(0, minWeight - range * 0.1);
     maxWeight = maxWeight + range * 0.1;
 
