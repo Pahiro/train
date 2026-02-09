@@ -753,24 +753,19 @@ button:active {
     border-radius: var(--radius-sm);
     text-align: center;
     transition: border-color 0.2s;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
 }
 
-.set-input:focus {
-    outline: none;
-    border-color: var(--accent-color);
-    background-color: #333;
+.set-input-empty {
+    color: var(--text-secondary);
 }
 
-/* Hide native number input spinner arrows */
-.set-input::-webkit-outer-spin-button,
-.set-input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-
-.set-input[type=number] {
-    -moz-appearance: textfield;
-}
+/* Remove old input-specific styles */
 
 .reps-label {
     font-size: 0.75rem;
@@ -884,6 +879,24 @@ button:active {
     font-size: 1.2rem;
 }
 
+.history-delete-btn {
+    background: none;
+    border: none;
+    color: #e74c3c;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    opacity: 0.5;
+    transition: opacity 0.2s, background-color 0.2s;
+    margin-left: 4px;
+}
+
+.history-delete-btn:hover {
+    opacity: 1;
+    background-color: rgba(231, 76, 60, 0.15);
+}
+
 .history-details {
     display: flex;
     gap: 16px;
@@ -898,6 +911,34 @@ button:active {
 .history-volume {
     color: var(--text-secondary);
     margin-left: auto;
+}
+
+.history-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    gap: 8px;
+}
+
+.pagination-btn {
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.pagination-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.pagination-info {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
 }
 
 .no-history {
@@ -1308,6 +1349,24 @@ button:active {
     margin-top: 4px;
     color: var(--text-secondary);
     font-size: 12px;
+}
+
+.targets-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.targets-grid .form-group {
+    margin-bottom: 0;
+}
+
+.exercise-targets {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    display: block;
 }
 
 .form-actions {

@@ -46,7 +46,7 @@ func (h *ExercisesHandler) listExercises(w http.ResponseWriter, r *http.Request)
 	category := r.URL.Query().Get("category")
 
 	// Build query
-	query := "SELECT id, name, type, category, created_at FROM exercises WHERE 1=1"
+	query := "SELECT id, name, type, category, target_sets, target_reps, target_weight, created_at FROM exercises WHERE 1=1"
 	args := []interface{}{}
 
 	if search != "" {
@@ -76,8 +76,10 @@ func (h *ExercisesHandler) listExercises(w http.ResponseWriter, r *http.Request)
 		var id int
 		var name, exerciseType, createdAt string
 		var category *string
+		var targetSets, targetReps *int
+		var targetWeight *float64
 
-		if err := rows.Scan(&id, &name, &exerciseType, &category, &createdAt); err != nil {
+		if err := rows.Scan(&id, &name, &exerciseType, &category, &targetSets, &targetReps, &targetWeight, &createdAt); err != nil {
 			http.Error(w, fmt.Sprintf("Scan error: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -90,6 +92,15 @@ func (h *ExercisesHandler) listExercises(w http.ResponseWriter, r *http.Request)
 		}
 		if category != nil {
 			exercise["category"] = *category
+		}
+		if targetSets != nil {
+			exercise["target_sets"] = *targetSets
+		}
+		if targetReps != nil {
+			exercise["target_reps"] = *targetReps
+		}
+		if targetWeight != nil {
+			exercise["target_weight"] = *targetWeight
 		}
 
 		exercises = append(exercises, exercise)
@@ -128,9 +139,12 @@ func (h *ExercisesHandler) getExercise(w http.ResponseWriter, r *http.Request, i
 // createExercise creates a new exercise
 func (h *ExercisesHandler) createExercise(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name     string  `json:"name"`
-		Type     string  `json:"type"`
-		Category *string `json:"category"`
+		Name         string   `json:"name"`
+		Type         string   `json:"type"`
+		Category     *string  `json:"category"`
+		TargetSets   *int     `json:"target_sets"`
+		TargetReps   *int     `json:"target_reps"`
+		TargetWeight *float64 `json:"target_weight"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -171,7 +185,7 @@ func (h *ExercisesHandler) createExercise(w http.ResponseWriter, r *http.Request
 		category = *req.Category
 	}
 
-	id, err := h.DB.CreateExercise(req.Name, req.Type, category)
+	id, err := h.DB.CreateExercise(req.Name, req.Type, category, req.TargetSets, req.TargetReps, req.TargetWeight)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			http.Error(w, "Exercise with this name already exists", http.StatusConflict)
@@ -200,9 +214,12 @@ func (h *ExercisesHandler) updateExercise(w http.ResponseWriter, r *http.Request
 	}
 
 	var req struct {
-		Name     *string `json:"name"`
-		Type     *string `json:"type"`
-		Category *string `json:"category"`
+		Name         *string  `json:"name"`
+		Type         *string  `json:"type"`
+		Category     *string  `json:"category"`
+		TargetSets   *int     `json:"target_sets"`
+		TargetReps   *int     `json:"target_reps"`
+		TargetWeight *float64 `json:"target_weight"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -225,6 +242,18 @@ func (h *ExercisesHandler) updateExercise(w http.ResponseWriter, r *http.Request
 	if req.Category != nil {
 		updates = append(updates, "category = ?")
 		args = append(args, *req.Category)
+	}
+	if req.TargetSets != nil {
+		updates = append(updates, "target_sets = ?")
+		args = append(args, *req.TargetSets)
+	}
+	if req.TargetReps != nil {
+		updates = append(updates, "target_reps = ?")
+		args = append(args, *req.TargetReps)
+	}
+	if req.TargetWeight != nil {
+		updates = append(updates, "target_weight = ?")
+		args = append(args, *req.TargetWeight)
 	}
 
 	if len(updates) == 0 {

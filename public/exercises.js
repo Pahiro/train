@@ -34,6 +34,10 @@ const dom = {
     exerciseName: document.getElementById('exercise-name'),
     exerciseType: document.getElementById('exercise-type'),
     exerciseCategory: document.getElementById('exercise-category'),
+    exerciseTargetSets: document.getElementById('exercise-target-sets'),
+    exerciseTargetReps: document.getElementById('exercise-target-reps'),
+    exerciseTargetWeight: document.getElementById('exercise-target-weight'),
+    targetsGroup: document.getElementById('targets-group'),
     modalClose: document.getElementById('modal-close'),
     cancelBtn: document.getElementById('cancel-btn'),
     saveBtn: document.getElementById('save-btn'),
@@ -109,13 +113,18 @@ function setupEventListeners() {
         }
     });
 
-    // Disable category for cardio exercises
+    // Disable category for cardio exercises, show/hide targets
     dom.exerciseType.addEventListener('change', (e) => {
         if (e.target.value === 'cardio') {
             dom.exerciseCategory.value = '';
             dom.exerciseCategory.disabled = true;
+            dom.targetsGroup.style.display = 'none';
         } else {
             dom.exerciseCategory.disabled = false;
+            dom.targetsGroup.style.display = 'block';
+            // Show/hide weight field based on type
+            dom.exerciseTargetWeight.closest('.form-group').style.display = 
+                e.target.value === 'bodyweight' ? 'none' : 'block';
         }
     });
 }
@@ -233,6 +242,9 @@ function createExerciseCard(exercise) {
                 ${exercise.category ? `
                     <span class="exercise-category">${categoryText}</span>
                 ` : ''}
+                ${exercise.type !== 'cardio' && (exercise.target_sets || exercise.target_reps) ? `
+                    <span class="exercise-targets">${exercise.target_sets || '?'}×${exercise.target_reps || '?'}${exercise.target_weight ? ` @ ${exercise.target_weight}kg` : ''}</span>
+                ` : ''}
             </div>
         </div>
     `;
@@ -245,6 +257,8 @@ function openAddModal() {
     dom.saveBtn.textContent = 'Save Exercise';
     dom.exerciseForm.reset();
     dom.exerciseCategory.disabled = false;
+    dom.targetsGroup.style.display = 'block';
+    dom.exerciseTargetWeight.closest('.form-group').style.display = 'block';
     dom.exerciseModal.style.display = 'flex';
 }
 
@@ -259,6 +273,21 @@ function openEditModal(exerciseId) {
     dom.exerciseType.value = exercise.type;
     dom.exerciseCategory.value = exercise.category || '';
     dom.exerciseCategory.disabled = exercise.type === 'cardio';
+
+    // Populate target fields
+    dom.exerciseTargetSets.value = exercise.target_sets || '';
+    dom.exerciseTargetReps.value = exercise.target_reps || '';
+    dom.exerciseTargetWeight.value = exercise.target_weight || '';
+
+    // Show/hide targets based on type
+    if (exercise.type === 'cardio') {
+        dom.targetsGroup.style.display = 'none';
+    } else {
+        dom.targetsGroup.style.display = 'block';
+        dom.exerciseTargetWeight.closest('.form-group').style.display = 
+            exercise.type === 'bodyweight' ? 'none' : 'block';
+    }
+
     dom.exerciseModal.style.display = 'flex';
 }
 
@@ -287,6 +316,11 @@ async function handleSubmit(e) {
     const type = dom.exerciseType.value;
     const category = type === 'cardio' ? null : (dom.exerciseCategory.value || null);
 
+    // Gather targets
+    const targetSets = type !== 'cardio' && dom.exerciseTargetSets.value ? parseInt(dom.exerciseTargetSets.value) : null;
+    const targetReps = type !== 'cardio' && dom.exerciseTargetReps.value ? parseInt(dom.exerciseTargetReps.value) : null;
+    const targetWeight = type === 'weight' && dom.exerciseTargetWeight.value ? parseFloat(dom.exerciseTargetWeight.value) : null;
+
     if (!name || !type) {
         alert('Please fill in all required fields');
         return;
@@ -298,10 +332,10 @@ async function handleSubmit(e) {
     try {
         if (state.editingExerciseId) {
             // Update existing exercise
-            await updateExercise(state.editingExerciseId, name, type, category);
+            await updateExercise(state.editingExerciseId, name, type, category, targetSets, targetReps, targetWeight);
         } else {
             // Create new exercise
-            await createExercise(name, type, category);
+            await createExercise(name, type, category, targetSets, targetReps, targetWeight);
         }
 
         closeModal();
@@ -316,17 +350,18 @@ async function handleSubmit(e) {
 }
 
 // Create exercise via API
-async function createExercise(name, type, category) {
+async function createExercise(name, type, category, targetSets, targetReps, targetWeight) {
+    const body = { name, type, category };
+    if (targetSets !== null) body.target_sets = targetSets;
+    if (targetReps !== null) body.target_reps = targetReps;
+    if (targetWeight !== null) body.target_weight = targetWeight;
+
     const response = await fetch('/api/exercises', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            name,
-            type,
-            category
-        })
+        body: JSON.stringify(body)
     });
 
     if (!response.ok) {
@@ -338,17 +373,18 @@ async function createExercise(name, type, category) {
 }
 
 // Update exercise via API
-async function updateExercise(id, name, type, category) {
+async function updateExercise(id, name, type, category, targetSets, targetReps, targetWeight) {
+    const body = { name, type, category };
+    if (targetSets !== null) body.target_sets = targetSets;
+    if (targetReps !== null) body.target_reps = targetReps;
+    if (targetWeight !== null) body.target_weight = targetWeight;
+
     const response = await fetch(`/api/exercises/${id}`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            name,
-            type,
-            category
-        })
+        body: JSON.stringify(body)
     });
 
     if (!response.ok) {

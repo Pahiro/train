@@ -22,6 +22,7 @@ const state = {
             weight: null
         },
         history: [],
+        historyPage: 0,
         pr: null
     },
     searchModal: {
@@ -167,26 +168,14 @@ function renderWorkout() {
                                 ${isWeight ? `
                                     <div class="edit-field exercise-name-display">
                                         <strong>${ex.name}</strong>
-                                        <small style="color: var(--text-secondary); font-size: 12px;">To change the exercise name, edit it in the Exercise Library</small>
-                                    </div>
-                                    <div class="edit-weight-grid">
-                                        <div class="edit-field">
-                                            <label>Sets</label>
-                                            <input type="number" class="edit-input ex-sets" value="${ex.target_sets || 3}" placeholder="3" data-index="${idx}">
-                                        </div>
-                                        <div class="edit-field">
-                                            <label>Reps</label>
-                                            <input type="number" class="edit-input ex-reps" value="${ex.target_reps || 10}" placeholder="10" data-index="${idx}">
-                                        </div>
-                                        <div class="edit-field">
-                                            <label>Weight (kg)</label>
-                                            <input type="number" class="edit-input ex-weight" value="${ex.current_weight || ex.target_weight || 0}" step="0.5" placeholder="0" data-index="${idx}">
-                                        </div>
+                                        <small style="color: var(--text-secondary); font-size: 12px;">
+                                            ${ex.target_sets || 3}×${ex.target_reps || 10} @ ${ex.target_weight || 0}kg
+                                            — Edit targets in the Exercise Library
+                                        </small>
                                     </div>
                                 ` : `
                                     <div class="edit-field exercise-name-display">
                                         <strong>${ex.name}</strong>
-                                        <small style="color: var(--text-secondary); font-size: 12px;">To change the exercise name, edit it in the Exercise Library</small>
                                     </div>
                                     <div class="edit-field">
                                         <label>Notes</label>
@@ -227,14 +216,39 @@ function renderWorkout() {
                         <div class="exercise-item weight-exercise" onclick="openExerciseDetail(${idx})">
                             <input type="checkbox" class="exercise-checkbox" 
                                 ${isDone ? 'checked' : ''} 
-                                onclick="event.stopPropagation(); toggleExercise(${idx})"
+                                onclick="event.stopPropagation(); event.preventDefault();"
                             >
                             <div class="exercise-content">
                                 <span class="exercise-text ${isDone ? 'done' : ''}">
                                     ${ex.name}
                                 </span>
                                 <span class="exercise-meta">
-                                    ${ex.target_sets}×${ex.target_reps} @ ${ex.current_weight || ex.target_weight || 0}kg
+                                    ${ex.target_sets}×${ex.target_reps} @ ${ex.target_weight || 0}kg
+                                    ${ex.ready_to_progress ? '<span class="progress-badge">📈 Ready!</span>' : ''}
+                                </span>
+                            </div>
+                            <svg class="chevron-icon" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </div>
+                    </li>
+                `;
+            }
+            // Bodyweight exercise - clickable for detail view (reps tracking)
+            else if (ex.type === 'bodyweight') {
+                return `
+                    <li>
+                        <div class="exercise-item weight-exercise" onclick="openExerciseDetail(${idx})">
+                            <input type="checkbox" class="exercise-checkbox" 
+                                ${isDone ? 'checked' : ''} 
+                                onclick="event.stopPropagation(); event.preventDefault();"
+                            >
+                            <div class="exercise-content">
+                                <span class="exercise-text ${isDone ? 'done' : ''}">
+                                    ${ex.name}
+                                </span>
+                                <span class="exercise-meta">
+                                    ${ex.target_sets}×${ex.target_reps} reps
                                     ${ex.ready_to_progress ? '<span class="progress-badge">📈 Ready!</span>' : ''}
                                 </span>
                             </div>
@@ -299,7 +313,7 @@ function renderExerciseModal() {
     // Initialize current session if not set
     if (state.modal.currentSession.sets.length === 0) {
         state.modal.currentSession.sets = new Array(exercise.target_sets).fill('');
-        state.modal.currentSession.weight = exercise.current_weight;
+        state.modal.currentSession.weight = exercise.target_weight || 0;
     }
 
     // Calculate if session is complete
@@ -330,9 +344,9 @@ function renderExerciseModal() {
                     <div class="weight-section">
                         <label>Current Weight</label>
                         <div class="weight-control">
-                            <button class="weight-btn" onclick="adjustWeight(-0.5)">-</button>
+                            <button class="weight-btn" onclick="adjustWeight(-1)">-</button>
                             <span class="weight-display">${state.modal.currentSession.weight} kg</span>
-                            <button class="weight-btn" onclick="adjustWeight(0.5)">+</button>
+                            <button class="weight-btn" onclick="adjustWeight(1)">+</button>
                         </div>
                         <div class="target-display">Target: ${exercise.target_sets}×${exercise.target_reps}</div>
                     </div>
@@ -361,16 +375,10 @@ function renderExerciseModal() {
                                     <label>Set ${idx + 1}</label>
                                     <div class="set-input-controls">
                                         <button class="set-adjust-btn" onclick="adjustSetReps(${idx}, -1)">-</button>
-                                        <input
-                                            type="number"
-                                            class="set-input"
-                                            placeholder="${exercise.target_reps}"
-                                            value="${state.modal.currentSession.sets[idx]}"
-                                            oninput="updateSetReps(${idx}, this.value)"
-                                            onfocus="autoFillTargetReps(${idx}, ${exercise.target_reps})"
-                                            min="0"
-                                            max="99"
-                                        >
+                                        <span
+                                            class="set-input ${state.modal.currentSession.sets[idx] === '' ? 'set-input-empty' : ''}"
+                                            onclick="fillTargetReps(${idx}, ${exercise.target_reps})"
+                                        >${state.modal.currentSession.sets[idx] === '' ? '-' : state.modal.currentSession.sets[idx]}</span>
                                         <button class="set-adjust-btn" onclick="adjustSetReps(${idx}, 1)">+</button>
                                     </div>
                                     <span class="reps-label">reps</span>
@@ -557,31 +565,12 @@ window.saveChanges = async () => {
             });
         }
 
-        // Update each exercise's targets from form inputs
+        // Update each exercise's notes from form inputs (targets are now on the exercise, not the routine)
         const exercises = state.exercises;
         for (let i = 0; i < exercises.length; i++) {
             const ex = exercises[i];
 
-            if (ex.type === 'weight' || ex.type === 'bodyweight') {
-                const setsInput = document.querySelector(`.ex-sets[data-index="${i}"]`);
-                const repsInput = document.querySelector(`.ex-reps[data-index="${i}"]`);
-                const weightInput = document.querySelector(`.ex-weight[data-index="${i}"]`);
-
-                const updates = {};
-                if (setsInput) updates.target_sets = parseInt(setsInput.value) || 3;
-                if (repsInput) updates.target_reps = parseInt(repsInput.value) || 10;
-                if (weightInput && ex.type === 'weight') {
-                    updates.target_weight = parseFloat(weightInput.value) || 0;
-                }
-
-                if (Object.keys(updates).length > 0) {
-                    await fetch(`/api/routines/${ex.routine_id}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(updates)
-                    });
-                }
-            } else if (ex.type === 'cardio') {
+            if (ex.type === 'cardio') {
                 const textInput = document.querySelector(`.exercise-input[data-index="${i}"]`);
                 if (textInput) {
                     await fetch(`/api/routines/${ex.routine_id}`, {
@@ -802,15 +791,12 @@ function closeExerciseSearchModal() {
 // Add selected exercise to current day
 async function addExerciseFromLibrary(exerciseId, exerciseName, exerciseType) {
     try {
-        // Create routine entry
+        // Create routine entry (targets are on the exercise, not the routine)
         const orderIndex = state.exercises.length;
         const payload = {
             exercise_id: exerciseId,
             day_of_week: state.selectedDay,
             order_index: orderIndex,
-            target_sets: exerciseType !== 'cardio' ? 3 : null,
-            target_reps: exerciseType !== 'cardio' ? 10 : null,
-            target_weight: exerciseType === 'weight' ? 0 : null,
             notes: exerciseType === 'cardio' ? '' : null
         };
 
@@ -859,7 +845,7 @@ window.openExerciseDetail = (index) => {
 
     // Initialize current session
     state.modal.currentSession.sets = new Array(exercise.target_sets || 3).fill('');
-    state.modal.currentSession.weight = exercise.current_weight || exercise.target_weight || 0;
+    state.modal.currentSession.weight = exercise.target_weight || 0;
 
     renderExerciseModal();
 };
@@ -872,9 +858,92 @@ window.closeExerciseDetail = () => {
     renderWorkout();
 };
 
+window.deleteHistoryEntry = async (historyId) => {
+    if (!confirm('Delete this history entry?')) return;
+    try {
+        const res = await fetch(`/api/history/${historyId}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete');
+
+        // Remove from state
+        state.modal.history = state.modal.history.filter(s => s.id !== historyId);
+
+        // Remove the card from DOM
+        const card = document.querySelector(`[data-history-id="${historyId}"]`);
+        if (card) card.remove();
+
+        // Update the session count header
+        const historyHeader = document.querySelector('.history-section h3');
+        if (historyHeader) {
+            historyHeader.textContent = `History (${state.modal.history.length} sessions)`;
+        }
+
+        // Re-fetch PR (may have changed) and re-render graph
+        const prRes = await fetch(`/api/history/${state.modal.exerciseId}/pr`);
+        const prData = await prRes.json();
+        state.modal.pr = prData.pr || null;
+        if (state.modal.history.length > 0) {
+            const exercise = state.exercises[state.modal.exerciseIndex];
+            renderWeightGraph(state.modal.history, state.modal.pr, exercise && exercise.type === 'bodyweight');
+        }
+    } catch (err) {
+        console.error('Failed to delete history entry:', err);
+        alert('Failed to delete entry');
+    }
+};
+
+function renderHistoryPage(history) {
+    const exercise = state.exercises[state.modal.exerciseIndex];
+    const isBodyweight = exercise && exercise.type === 'bodyweight';
+    const page = state.modal.historyPage;
+    const start = page * 5;
+    const pageItems = history.slice(start, start + 5);
+    return pageItems.map(session => `
+        <div class="history-card ${session.completed ? 'completed' : 'incomplete'}" data-history-id="${session.id}">
+            <div class="history-header">
+                <span class="history-date">${session.session_date}</span>
+                <span class="history-status">${session.completed ? '✓' : '✗'}</span>
+                ${session.is_pr ? '<span class="pr-badge">🏆 PR</span>' : ''}
+                <button class="history-delete-btn" onclick="event.stopPropagation(); deleteHistoryEntry(${session.id})" title="Delete entry">✕</button>
+            </div>
+            <div class="history-details">
+                ${isBodyweight ? '' : `<span>${session.weight}kg</span>`}
+                <span class="history-sets">${session.sets_completed.join(', ')} reps</span>
+                ${isBodyweight
+                    ? `<span class="history-volume">${session.sets_completed.reduce((a,b) => a+b, 0)} total reps</span>`
+                    : `<span class="history-volume">${session.volume}kg total</span>`
+                }
+            </div>
+        </div>
+    `).join('');
+}
+
+window.changeHistoryPage = (delta) => {
+    const history = state.modal.history;
+    const maxPage = Math.ceil(history.length / 5) - 1;
+    state.modal.historyPage = Math.max(0, Math.min(maxPage, state.modal.historyPage + delta));
+
+    // Update list directly
+    const list = document.getElementById('history-list');
+    if (list) list.innerHTML = renderHistoryPage(history);
+
+    // Update pagination controls
+    const pagination = document.querySelector('.history-pagination');
+    if (pagination) {
+        const btns = pagination.querySelectorAll('.pagination-btn');
+        btns[0].disabled = state.modal.historyPage === 0;
+        btns[1].disabled = state.modal.historyPage >= maxPage;
+        pagination.querySelector('.pagination-info').textContent =
+            `${state.modal.historyPage + 1} / ${maxPage + 1}`;
+    }
+};
+
 window.adjustWeight = (delta) => {
     state.modal.currentSession.weight = Math.max(0, state.modal.currentSession.weight + delta);
-    renderExerciseModal();
+    const weightDisplay = document.querySelector('.weight-display');
+    if (weightDisplay) {
+        weightDisplay.textContent = `${state.modal.currentSession.weight} kg`;
+    }
+    updateModalStats();
 };
 
 window.updateSetReps = (setIndex, value) => {
@@ -883,19 +952,25 @@ window.updateSetReps = (setIndex, value) => {
 };
 
 window.adjustSetReps = (setIndex, delta) => {
-    const input = document.querySelectorAll('.set-input')[setIndex];
     const exercise = state.exercises[state.modal.exerciseIndex];
+    const current = state.modal.currentSession.sets[setIndex];
 
     let currentValue;
-    if (!input.value || input.value === '') {
+    if (current === '' || current === undefined) {
         currentValue = exercise.target_reps;
     } else {
-        currentValue = parseInt(input.value);
+        currentValue = parseInt(current);
     }
 
     const newValue = Math.max(0, Math.min(99, currentValue + delta));
-    input.value = newValue;
-    updateSetReps(setIndex, newValue.toString());
+    state.modal.currentSession.sets[setIndex] = newValue.toString();
+    // Update DOM directly instead of re-rendering
+    const span = document.querySelectorAll('.set-input')[setIndex];
+    if (span) {
+        span.textContent = newValue;
+        span.classList.remove('set-input-empty');
+    }
+    updateModalStats();
 };
 
 window.autoFillTargetReps = (setIndex, targetReps) => {
@@ -907,15 +982,37 @@ window.autoFillTargetReps = (setIndex, targetReps) => {
     }
 };
 
+window.fillTargetReps = (setIndex, targetReps) => {
+    if (state.modal.currentSession.sets[setIndex] === '') {
+        state.modal.currentSession.sets[setIndex] = targetReps.toString();
+        const span = document.querySelectorAll('.set-input')[setIndex];
+        if (span) {
+            span.textContent = targetReps;
+            span.classList.remove('set-input-empty');
+        }
+        updateModalStats();
+    }
+};
+
 function updateModalStats() {
-    const currentVolume = state.modal.currentSession.sets.reduce((sum, reps) => {
-        const repsNum = parseInt(reps) || 0;
-        return sum + (repsNum * state.modal.currentSession.weight);
-    }, 0);
+    const exercise = state.exercises[state.modal.exerciseIndex];
+    const isBodyweight = exercise.type === 'bodyweight';
+    const totalReps = state.modal.currentSession.sets.reduce((sum, reps) => sum + (parseInt(reps) || 0), 0);
+    const currentVolume = isBodyweight ? totalReps : totalReps * state.modal.currentSession.weight;
 
     const volumeElement = document.querySelector('.stat-value');
     if (volumeElement) {
-        volumeElement.textContent = `${currentVolume} kg`;
+        volumeElement.textContent = isBodyweight ? `${currentVolume} reps` : `${currentVolume} kg`;
+    }
+
+    const allSetsComplete = state.modal.currentSession.sets.every(reps => {
+        const repsNum = parseInt(reps);
+        return !isNaN(repsNum) && repsNum >= exercise.target_reps;
+    });
+    const statusElement = document.querySelector('.stat-value.success, .stat-value.incomplete');
+    if (statusElement) {
+        statusElement.textContent = allSetsComplete ? '✓ Complete' : 'Incomplete';
+        statusElement.className = `stat-value ${allSetsComplete ? 'success' : 'incomplete'}`;
     }
 }
 
@@ -923,17 +1020,15 @@ window.completeExerciseSession = async () => {
     const exerciseIndex = state.modal.exerciseIndex;
     const exercise = state.exercises[exerciseIndex];
     const today = getTodayDateString();
+    const isBodyweight = exercise.type === 'bodyweight';
 
-    // Validate that all sets have values
-    const allSetsEntered = state.modal.currentSession.sets.every(reps => {
-        const repsNum = parseInt(reps);
-        return !isNaN(repsNum) && repsNum >= 0;
+    // Auto-fill any empty sets with target reps
+    state.modal.currentSession.sets = state.modal.currentSession.sets.map(reps => {
+        if (reps === '' || reps === undefined) {
+            return exercise.target_reps.toString();
+        }
+        return reps;
     });
-
-    if (!allSetsEntered) {
-        alert('Please enter reps for all sets before completing the session.');
-        return;
-    }
 
     // Convert sets to numbers
     const setsCompleted = state.modal.currentSession.sets.map(r => parseInt(r));
@@ -942,7 +1037,8 @@ window.completeExerciseSession = async () => {
     const isSuccessful = setsCompleted.every(reps => reps >= exercise.target_reps);
 
     // Calculate volume
-    const volume = setsCompleted.reduce((sum, reps) => sum + reps, 0) * state.modal.currentSession.weight;
+    const totalReps = setsCompleted.reduce((sum, reps) => sum + reps, 0);
+    const volume = isBodyweight ? totalReps : totalReps * state.modal.currentSession.weight;
 
     try {
         // Create history entry via API
@@ -952,7 +1048,7 @@ window.completeExerciseSession = async () => {
             body: JSON.stringify({
                 exercise_id: exercise.exercise_id,
                 session_date: today,
-                weight: state.modal.currentSession.weight,
+                weight: isBodyweight ? 0 : state.modal.currentSession.weight,
                 sets_completed: setsCompleted,
                 completed: isSuccessful,
                 volume: volume
@@ -961,6 +1057,32 @@ window.completeExerciseSession = async () => {
 
         if (!response.ok) {
             throw new Error('Failed to save session');
+        }
+
+        if (isBodyweight) {
+            // For bodyweight: increase target_reps after 3 consecutive successful sessions
+            // consecutive_successes is computed from history, so after saving we need to check
+            // The current session counts as +1 if successful
+            const newConsecutive = isSuccessful ? (exercise.consecutive_successes || 0) + 1 : 0;
+            if (newConsecutive >= 3) {
+                const newTargetReps = (exercise.target_reps || 0) + 1;
+                await fetch(`/api/exercises/${exercise.exercise_id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_reps: newTargetReps })
+                });
+                showToast(`Rep target increased to ${newTargetReps}! 🎯`);
+            }
+        } else {
+            // Update exercise's target_weight if it changed
+            const originalWeight = exercise.target_weight || 0;
+            if (state.modal.currentSession.weight !== originalWeight) {
+                await fetch(`/api/exercises/${exercise.exercise_id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_weight: state.modal.currentSession.weight })
+                });
+            }
         }
 
         // Close modal and reload data
@@ -981,10 +1103,11 @@ window.openExerciseDetail = async (index) => {
     state.modal.exerciseIndex = index;
     const exercise = state.exercises[index];
     state.modal.exerciseId = exercise.exercise_id;
+    state.modal.historyPage = 0;
 
     // Initialize current session
     state.modal.currentSession.sets = new Array(exercise.target_sets || 3).fill('');
-    state.modal.currentSession.weight = exercise.current_weight || exercise.target_weight || 0;
+    state.modal.currentSession.weight = exercise.target_weight || 0;
 
     // Fetch history and PR data from API
     try {
@@ -1015,11 +1138,12 @@ async function renderExerciseModal() {
     const today = getTodayDateString();
     const history = state.modal.history || [];
     const pr = state.modal.pr;
+    const isBodyweight = exercise.type === 'bodyweight';
 
     // Initialize current session if not set
     if (state.modal.currentSession.sets.length === 0) {
         state.modal.currentSession.sets = new Array(exercise.target_sets).fill('');
-        state.modal.currentSession.weight = exercise.current_weight || exercise.target_weight || 0;
+        state.modal.currentSession.weight = exercise.target_weight || 0;
     }
 
     // Calculate if session is complete
@@ -1028,14 +1152,12 @@ async function renderExerciseModal() {
         return !isNaN(repsNum) && repsNum >= exercise.target_reps;
     });
 
-    // Calculate current volume
-    const currentVolume = state.modal.currentSession.sets.reduce((sum, reps) => {
-        const repsNum = parseInt(reps) || 0;
-        return sum + (repsNum * state.modal.currentSession.weight);
-    }, 0);
+    // Calculate current volume (total reps for bodyweight, kg for weight)
+    const totalReps = state.modal.currentSession.sets.reduce((sum, reps) => sum + (parseInt(reps) || 0), 0);
+    const currentVolume = isBodyweight ? totalReps : totalReps * state.modal.currentSession.weight;
 
-    // Check if current session would be a PR
-    const wouldBePR = pr && state.modal.currentSession.weight > pr.weight;
+    // Check if current session would be a PR (weight PR for weight exercises, not applicable for bodyweight)
+    const wouldBePR = !isBodyweight && pr && state.modal.currentSession.weight > pr.weight;
 
     const modalHTML = `
         <div class="modal-overlay" onclick="closeExerciseDetail()">
@@ -1046,25 +1168,31 @@ async function renderExerciseModal() {
                 </div>
 
                 <div class="modal-body">
-                    <!-- Weight Control -->
+                    <!-- Weight Control (weight exercises only) -->
+                    ${!isBodyweight ? `
                     <div class="weight-section">
                         <label>Current Weight</label>
                         <div class="weight-control">
-                            <button class="weight-btn" onclick="adjustWeight(-0.5)">-</button>
+                            <button class="weight-btn" onclick="adjustWeight(-1)">-</button>
                             <span class="weight-display">${state.modal.currentSession.weight} kg</span>
-                            <button class="weight-btn" onclick="adjustWeight(0.5)">+</button>
+                            <button class="weight-btn" onclick="adjustWeight(1)">+</button>
                         </div>
                         <div class="target-display">Target: ${exercise.target_sets}×${exercise.target_reps}</div>
                         ${pr ? `<div class="pr-display">PR: ${pr.weight}kg (${pr.date})</div>` : ''}
                         ${wouldBePR ? `<div class="pr-badge-current">🏆 New PR!</div>` : ''}
                     </div>
+                    ` : `
+                    <div class="weight-section">
+                        <div class="target-display">Target: ${exercise.target_sets}×${exercise.target_reps} reps</div>
+                    </div>
+                    `}
 
                     <!-- Progression Status -->
                     ${exercise.ready_to_progress ? `
                         <div class="progression-alert">
                             <span class="progress-icon">🎯</span>
                             <div>
-                                <strong>Ready to increase weight!</strong>
+                                <strong>${isBodyweight ? 'Ready to increase reps!' : 'Ready to increase weight!'}</strong>
                                 <p>${exercise.consecutive_successes} consecutive successful sessions</p>
                             </div>
                         </div>
@@ -1083,16 +1211,10 @@ async function renderExerciseModal() {
                                     <label>Set ${idx + 1}</label>
                                     <div class="set-input-controls">
                                         <button class="set-adjust-btn" onclick="adjustSetReps(${idx}, -1)">-</button>
-                                        <input
-                                            type="number"
-                                            class="set-input"
-                                            placeholder="${exercise.target_reps}"
-                                            value="${state.modal.currentSession.sets[idx]}"
-                                            oninput="updateSetReps(${idx}, this.value)"
-                                            onfocus="autoFillTargetReps(${idx}, ${exercise.target_reps})"
-                                            min="0"
-                                            max="99"
-                                        >
+                                        <span
+                                            class="set-input ${state.modal.currentSession.sets[idx] === '' ? 'set-input-empty' : ''}"
+                                            onclick="fillTargetReps(${idx}, ${exercise.target_reps})"
+                                        >${state.modal.currentSession.sets[idx] === '' ? '-' : state.modal.currentSession.sets[idx]}</span>
                                         <button class="set-adjust-btn" onclick="adjustSetReps(${idx}, 1)">+</button>
                                     </div>
                                     <span class="reps-label">reps</span>
@@ -1102,8 +1224,8 @@ async function renderExerciseModal() {
 
                         <div class="session-stats">
                             <div class="stat">
-                                <span class="stat-label">Volume</span>
-                                <span class="stat-value">${currentVolume} kg</span>
+                                <span class="stat-label">${isBodyweight ? 'Total Reps' : 'Volume'}</span>
+                                <span class="stat-value">${isBodyweight ? currentVolume + ' reps' : currentVolume + ' kg'}</span>
                             </div>
                             <div class="stat">
                                 <span class="stat-label">Status</span>
@@ -1123,28 +1245,22 @@ async function renderExerciseModal() {
                         <div class="history-section">
                             <h3>History (${history.length} sessions)</h3>
 
-                            <!-- Weight Progression Graph -->
+                            <!-- Progression Graph -->
                             <div class="graph-container">
                                 <canvas id="weight-graph" width="400" height="200"></canvas>
                             </div>
 
                             <!-- Recent Sessions -->
-                            <div class="history-list">
-                                ${history.slice(0, 5).map(session => `
-                                    <div class="history-card ${session.completed ? 'completed' : 'incomplete'}">
-                                        <div class="history-header">
-                                            <span class="history-date">${session.session_date}</span>
-                                            <span class="history-status">${session.completed ? '✓' : '✗'}</span>
-                                            ${session.is_pr ? '<span class="pr-badge">🏆 PR</span>' : ''}
-                                        </div>
-                                        <div class="history-details">
-                                            <span>${session.weight}kg</span>
-                                            <span class="history-sets">${session.sets_completed.join(', ')} reps</span>
-                                            <span class="history-volume">${session.volume}kg total</span>
-                                        </div>
-                                    </div>
-                                `).join('')}
+                            <div class="history-list" id="history-list">
+                                ${renderHistoryPage(history)}
                             </div>
+                            ${history.length > 5 ? `
+                                <div class="history-pagination">
+                                    <button class="pagination-btn" onclick="changeHistoryPage(-1)" ${state.modal.historyPage === 0 ? 'disabled' : ''}>&laquo; Newer</button>
+                                    <span class="pagination-info">${state.modal.historyPage + 1} / ${Math.ceil(history.length / 5)}</span>
+                                    <button class="pagination-btn" onclick="changeHistoryPage(1)" ${(state.modal.historyPage + 1) * 5 >= history.length ? 'disabled' : ''}>Older &raquo;</button>
+                                </div>
+                            ` : ''}
                         </div>
                     ` : '<div class="no-history">No history yet. Complete your first session!</div>'}
                 </div>
@@ -1156,12 +1272,12 @@ async function renderExerciseModal() {
 
     // Render graph if there's history
     if (history.length > 0) {
-        setTimeout(() => renderWeightGraph(history, pr), 0);
+        setTimeout(() => renderWeightGraph(history, pr, isBodyweight), 0);
     }
 }
 
 // Updated graph rendering with PR line
-function renderWeightGraph(history, pr) {
+function renderWeightGraph(history, pr, isBodyweight = false) {
     const canvas = document.getElementById('weight-graph');
     if (!canvas) return;
 
@@ -1175,24 +1291,29 @@ function renderWeightGraph(history, pr) {
 
     // Use last 20 sessions for graph (or all if less)
     const graphHistory = history.slice(-20);
-    const weights = graphHistory.map(s => s.weight);
 
-    if (weights.length === 0) return;
+    // For bodyweight: plot total reps per session; for weight: plot weight
+    const values = graphHistory.map(s =>
+        isBodyweight ? (s.sets_completed || []).reduce((a, b) => a + b, 0) : s.weight
+    );
+    const label = isBodyweight ? 'reps' : 'kg';
+
+    if (values.length === 0) return;
 
     // Determine Y-axis range
-    let minWeight = Math.min(...weights);
-    let maxWeight = Math.max(...weights);
+    let minVal = Math.min(...values);
+    let maxVal = Math.max(...values);
 
-    // Include PR in range if it exists
-    if (pr && pr.weight) {
-        minWeight = Math.min(minWeight, pr.weight);
-        maxWeight = Math.max(maxWeight, pr.weight);
+    // Include PR in range if it exists (weight exercises only)
+    if (!isBodyweight && pr && pr.weight) {
+        minVal = Math.min(minVal, pr.weight);
+        maxVal = Math.max(maxVal, pr.weight);
     }
 
     // Add padding to range (use minimum range of 10 for single data points)
-    const range = maxWeight - minWeight || 10;
-    minWeight = Math.max(0, minWeight - range * 0.1);
-    maxWeight = maxWeight + range * 0.1;
+    const range = maxVal - minVal || 10;
+    minVal = Math.max(0, minVal - range * 0.1);
+    maxVal = maxVal + range * 0.1;
 
     const graphWidth = width - 2 * padding;
     const graphHeight = height - 2 * padding;
@@ -1217,16 +1338,16 @@ function renderWeightGraph(history, pr) {
         ctx.stroke();
 
         // Y-axis labels
-        const weightValue = maxWeight - (maxWeight - minWeight) * (i / 4);
+        const axisValue = maxVal - (maxVal - minVal) * (i / 4);
         ctx.fillStyle = '#888';
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'right';
-        ctx.fillText(weightValue.toFixed(1), padding - 5, y + 4);
+        ctx.fillText(isBodyweight ? Math.round(axisValue) : axisValue.toFixed(1), padding - 5, y + 4);
     }
 
-    // Draw PR line (horizontal dashed line)
-    if (pr && pr.weight) {
-        const prY = padding + graphHeight * (1 - (pr.weight - minWeight) / (maxWeight - minWeight));
+    // Draw PR line (horizontal dashed line) - weight exercises only
+    if (!isBodyweight && pr && pr.weight) {
+        const prY = padding + graphHeight * (1 - (pr.weight - minVal) / (maxVal - minVal));
 
         ctx.strokeStyle = '#FF5252';
         ctx.lineWidth = 2;
@@ -1251,11 +1372,11 @@ function renderWeightGraph(history, pr) {
 
     ctx.beginPath();
     graphHistory.forEach((session, idx) => {
-        // For single data point, center it. Otherwise, space evenly.
+        const val = values[idx];
         const x = graphHistory.length === 1
             ? padding + graphWidth / 2
             : padding + (graphWidth * idx) / (graphHistory.length - 1);
-        const y = padding + graphHeight * (1 - (session.weight - minWeight) / (maxWeight - minWeight));
+        const y = padding + graphHeight * (1 - (val - minVal) / (maxVal - minVal));
 
         if (idx === 0) {
             ctx.moveTo(x, y);
@@ -1267,21 +1388,21 @@ function renderWeightGraph(history, pr) {
 
     // Draw data points
     graphHistory.forEach((session, idx) => {
-        // For single data point, center it. Otherwise, space evenly.
+        const val = values[idx];
         const x = graphHistory.length === 1
             ? padding + graphWidth / 2
             : padding + (graphWidth * idx) / (graphHistory.length - 1);
-        const y = padding + graphHeight * (1 - (session.weight - minWeight) / (maxWeight - minWeight));
+        const y = padding + graphHeight * (1 - (val - minVal) / (maxVal - minVal));
 
         ctx.beginPath();
         ctx.arc(x, y, 5, 0, 2 * Math.PI);
         ctx.fill();
 
-        // Weight label above point
+        // Value label above point
         ctx.fillStyle = '#00E5FF';
         ctx.font = '11px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(session.weight, x, y - 10);
+        ctx.fillText(isBodyweight ? Math.round(val) : val, x, y - 10);
     });
 }
 

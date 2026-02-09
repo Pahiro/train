@@ -71,26 +71,42 @@ func (h *RoutinesHandler) getRoutinesByDay(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Query routines with exercise details and progression info
+	// Query routines with exercise details; derive progression from history
 	query := `
 		SELECT
 			r.id,
 			r.exercise_id,
 			r.order_index,
-			r.target_sets,
-			r.target_reps,
-			r.target_weight,
 			r.notes,
 			e.name,
 			e.type,
 			e.category,
-			p.current_weight,
-			p.consecutive_successes,
-			p.ready_to_progress,
-			p.last_done
+			e.target_sets,
+			e.target_reps,
+			e.target_weight,
+			(SELECT MAX(session_date) FROM history WHERE exercise_id = e.id) as last_done,
+			CASE
+				WHEN e.type = 'bodyweight' THEN
+					(SELECT COUNT(*) FROM history
+					 WHERE exercise_id = e.id AND completed = 1
+					   AND session_date >= COALESCE(
+						 (SELECT MAX(session_date) FROM history
+						  WHERE exercise_id = e.id AND completed = 0),
+						 '0000-01-01'
+					   )
+					)
+				ELSE
+					(SELECT COUNT(*) FROM history
+					 WHERE exercise_id = e.id AND completed = 1 AND weight = e.target_weight
+					   AND session_date >= COALESCE(
+						 (SELECT MAX(session_date) FROM history
+						  WHERE exercise_id = e.id AND (completed = 0 OR weight != e.target_weight)),
+						 '0000-01-01'
+					   )
+					)
+			END as consecutive_successes
 		FROM routines r
 		JOIN exercises e ON r.exercise_id = e.id
-		LEFT JOIN exercise_progression p ON e.id = p.exercise_id
 		WHERE r.day_of_week = ?
 		ORDER BY r.order_index
 	`
@@ -105,18 +121,19 @@ func (h *RoutinesHandler) getRoutinesByDay(w http.ResponseWriter, r *http.Reques
 	exercises := []map[string]interface{}{}
 	for rows.Next() {
 		var routineID, exerciseID, orderIndex int
-		var targetSets, targetReps, consecutiveSuccesses *int
-		var targetWeight, currentWeight *float64
+		var targetSets, targetReps *int
+		var targetWeight *float64
 		var notes, lastDone *string
 		var name, exerciseType string
 		var category *string
-		var readyToProgress *bool
+		var consecutiveSuccesses int
 
 		err := rows.Scan(
 			&routineID, &exerciseID, &orderIndex,
-			&targetSets, &targetReps, &targetWeight, &notes,
+			&notes,
 			&name, &exerciseType, &category,
-			&currentWeight, &consecutiveSuccesses, &readyToProgress, &lastDone,
+			&targetSets, &targetReps, &targetWeight,
+			&lastDone, &consecutiveSuccesses,
 		)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Scan error: %v", err), http.StatusInternalServerError)
@@ -124,11 +141,13 @@ func (h *RoutinesHandler) getRoutinesByDay(w http.ResponseWriter, r *http.Reques
 		}
 
 		exercise := map[string]interface{}{
-			"routine_id":   routineID,
-			"exercise_id":  exerciseID,
-			"order_index":  orderIndex,
-			"name":         name,
-			"type":         exerciseType,
+			"routine_id":            routineID,
+			"exercise_id":           exerciseID,
+			"order_index":           orderIndex,
+			"name":                  name,
+			"type":                  exerciseType,
+			"consecutive_successes": consecutiveSuccesses,
+			"ready_to_progress":     consecutiveSuccesses >= 3,
 		}
 
 		if category != nil {
@@ -145,15 +164,6 @@ func (h *RoutinesHandler) getRoutinesByDay(w http.ResponseWriter, r *http.Reques
 		}
 		if notes != nil {
 			exercise["notes"] = *notes
-		}
-		if currentWeight != nil {
-			exercise["current_weight"] = *currentWeight
-		}
-		if consecutiveSuccesses != nil {
-			exercise["consecutive_successes"] = *consecutiveSuccesses
-		}
-		if readyToProgress != nil {
-			exercise["ready_to_progress"] = *readyToProgress
 		}
 		if lastDone != nil {
 			exercise["last_done"] = *lastDone
@@ -175,13 +185,10 @@ func (h *RoutinesHandler) getRoutinesByDay(w http.ResponseWriter, r *http.Reques
 // createRoutine adds an exercise to a day
 func (h *RoutinesHandler) createRoutine(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ExerciseID   int      `json:"exercise_id"`
-		DayOfWeek    string   `json:"day_of_week"`
-		OrderIndex   int      `json:"order_index"`
-		TargetSets   *int     `json:"target_sets"`
-		TargetReps   *int     `json:"target_reps"`
-		TargetWeight *float64 `json:"target_weight"`
-		Notes        *string  `json:"notes"`
+		ExerciseID int     `json:"exercise_id"`
+		DayOfWeek  string  `json:"day_of_week"`
+		OrderIndex int     `json:"order_index"`
+		Notes      *string `json:"notes"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -209,9 +216,6 @@ func (h *RoutinesHandler) createRoutine(w http.ResponseWriter, r *http.Request) 
 		req.ExerciseID,
 		req.DayOfWeek,
 		orderIndex,
-		req.TargetSets,
-		req.TargetReps,
-		req.TargetWeight,
 		req.Notes,
 	)
 	if err != nil {
@@ -238,39 +242,13 @@ func (h *RoutinesHandler) updateRoutine(w http.ResponseWriter, r *http.Request, 
 	}
 
 	var req struct {
-		OrderIndex   *int     `json:"order_index"`
-		TargetSets   *int     `json:"target_sets"`
-		TargetReps   *int     `json:"target_reps"`
-		TargetWeight *float64 `json:"target_weight"`
-		Notes        *string  `json:"notes"`
-		LastDone     *string  `json:"last_done"`
+		OrderIndex *int    `json:"order_index"`
+		Notes      *string `json:"notes"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
-	}
-
-	// Handle last_done separately - it updates exercise_progression, not routines
-	if req.LastDone != nil {
-		// First, get the exercise_id for this routine
-		var exerciseID int
-		err := h.DB.QueryRow("SELECT exercise_id FROM routines WHERE id = ?", id).Scan(&exerciseID)
-		if err != nil {
-			http.Error(w, "Routine not found", http.StatusNotFound)
-			return
-		}
-
-		// Update exercise_progression.last_done
-		_, err = h.DB.Exec(`
-			INSERT INTO exercise_progression (exercise_id, last_done)
-			VALUES (?, ?)
-			ON CONFLICT(exercise_id) DO UPDATE SET last_done = ?
-		`, exerciseID, *req.LastDone, *req.LastDone)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to update last_done: %v", err), http.StatusInternalServerError)
-			return
-		}
 	}
 
 	// Build update query dynamically for routine fields
@@ -280,18 +258,6 @@ func (h *RoutinesHandler) updateRoutine(w http.ResponseWriter, r *http.Request, 
 	if req.OrderIndex != nil {
 		updates = append(updates, "order_index = ?")
 		args = append(args, *req.OrderIndex)
-	}
-	if req.TargetSets != nil {
-		updates = append(updates, "target_sets = ?")
-		args = append(args, *req.TargetSets)
-	}
-	if req.TargetReps != nil {
-		updates = append(updates, "target_reps = ?")
-		args = append(args, *req.TargetReps)
-	}
-	if req.TargetWeight != nil {
-		updates = append(updates, "target_weight = ?")
-		args = append(args, *req.TargetWeight)
 	}
 	if req.Notes != nil {
 		updates = append(updates, "notes = ?")

@@ -50,28 +50,106 @@ func initSchema(db *sql.DB) error {
 		return fmt.Errorf("failed to execute schema: %w", err)
 	}
 
+	// Run migration to move targets from routines to exercises
+	if err := migrateTargetsToExercises(db); err != nil {
+		return fmt.Errorf("failed to migrate targets: %w", err)
+	}
+
+	return nil
+}
+
+// migrateTargetsToExercises moves target_sets/reps/weight from routines to exercises (one-time)
+func migrateTargetsToExercises(db *sql.DB) error {
+	// Check if routines table still has target_sets column
+	var colCount int
+	err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('routines') WHERE name = 'target_sets'`).Scan(&colCount)
+	if err != nil || colCount == 0 {
+		return nil // Already migrated or fresh DB
+	}
+
+	// Check if exercises table already has target_sets column
+	err = db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('exercises') WHERE name = 'target_sets'`).Scan(&colCount)
+	if err != nil {
+		return err
+	}
+	if colCount == 0 {
+		// Add columns to exercises table
+		for _, col := range []string{
+			"ALTER TABLE exercises ADD COLUMN target_sets INTEGER",
+			"ALTER TABLE exercises ADD COLUMN target_reps INTEGER",
+			"ALTER TABLE exercises ADD COLUMN target_weight REAL",
+		} {
+			if _, err := db.Exec(col); err != nil {
+				return fmt.Errorf("failed to add column: %w", err)
+			}
+		}
+	}
+
+	// Copy target values from routines to exercises (take the first non-null value per exercise)
+	_, err = db.Exec(`
+		UPDATE exercises SET
+			target_sets = COALESCE(target_sets, (SELECT r.target_sets FROM routines r WHERE r.exercise_id = exercises.id AND r.target_sets IS NOT NULL LIMIT 1)),
+			target_reps = COALESCE(target_reps, (SELECT r.target_reps FROM routines r WHERE r.exercise_id = exercises.id AND r.target_reps IS NOT NULL LIMIT 1)),
+			target_weight = COALESCE(target_weight, (SELECT r.target_weight FROM routines r WHERE r.exercise_id = exercises.id AND r.target_weight IS NOT NULL LIMIT 1))
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to copy targets: %w", err)
+	}
+
+	// Recreate routines table without target columns
+	// SQLite doesn't support DROP COLUMN in older versions, so we recreate
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS routines_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			exercise_id INTEGER NOT NULL,
+			day_of_week TEXT NOT NULL CHECK(day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')),
+			order_index INTEGER NOT NULL,
+			notes TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+		);
+		INSERT INTO routines_new (id, exercise_id, day_of_week, order_index, notes, created_at)
+			SELECT id, exercise_id, day_of_week, order_index, notes, created_at FROM routines;
+		DROP TABLE routines;
+		ALTER TABLE routines_new RENAME TO routines;
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to recreate routines table: %w", err)
+	}
+
+	// Recreate indexes
+	for _, idx := range []string{
+		"CREATE INDEX IF NOT EXISTS idx_routines_day ON routines(day_of_week, order_index)",
+		"CREATE INDEX IF NOT EXISTS idx_routines_exercise ON routines(exercise_id)",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_routines_day_order ON routines(day_of_week, order_index)",
+	} {
+		if _, err := db.Exec(idx); err != nil {
+			return fmt.Errorf("failed to recreate index: %w", err)
+		}
+	}
+
 	return nil
 }
 
 // Exercise represents an exercise definition
 type Exercise struct {
-	ID        int    `json:"id"`
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	Category  string `json:"category,omitempty"`
-	CreatedAt string `json:"created_at"`
+	ID           int      `json:"id"`
+	Name         string   `json:"name"`
+	Type         string   `json:"type"`
+	Category     string   `json:"category,omitempty"`
+	TargetSets   *int     `json:"target_sets,omitempty"`
+	TargetReps   *int     `json:"target_reps,omitempty"`
+	TargetWeight *float64 `json:"target_weight,omitempty"`
+	CreatedAt    string   `json:"created_at"`
 }
 
 // Routine represents an exercise scheduled on a day
 type Routine struct {
-	ID           int     `json:"id"`
-	ExerciseID   int     `json:"exercise_id"`
-	DayOfWeek    string  `json:"day_of_week"`
-	OrderIndex   int     `json:"order_index"`
-	TargetSets   *int    `json:"target_sets,omitempty"`
-	TargetReps   *int    `json:"target_reps,omitempty"`
-	TargetWeight *float64 `json:"target_weight,omitempty"`
-	Notes        *string `json:"notes,omitempty"`
+	ID         int     `json:"id"`
+	ExerciseID int     `json:"exercise_id"`
+	DayOfWeek  string  `json:"day_of_week"`
+	OrderIndex int     `json:"order_index"`
+	Notes      *string `json:"notes,omitempty"`
 }
 
 // History represents a workout session
@@ -85,15 +163,6 @@ type History struct {
 	Volume        *float64 `json:"volume,omitempty"`
 	IsPR          bool     `json:"is_pr"`
 	Notes         *string  `json:"notes,omitempty"`
-}
-
-// Progression tracks current weight and progression status
-type Progression struct {
-	ExerciseID           int      `json:"exercise_id"`
-	CurrentWeight        *float64 `json:"current_weight,omitempty"`
-	ConsecutiveSuccesses int      `json:"consecutive_successes"`
-	ReadyToProgress      bool     `json:"ready_to_progress"`
-	LastDone             *string  `json:"last_done,omitempty"`
 }
 
 // DayTitle represents a day's title
@@ -115,19 +184,19 @@ type MetricType struct {
 
 // MetricEntry represents a single measurement of a metric
 type MetricEntry struct {
-	ID           int      `json:"id"`
-	MetricTypeID int      `json:"metric_type_id"`
-	EntryDate    string   `json:"entry_date"`
-	Value        float64  `json:"value"`
-	Notes        *string  `json:"notes,omitempty"`
-	CreatedAt    string   `json:"created_at"`
+	ID           int     `json:"id"`
+	MetricTypeID int     `json:"metric_type_id"`
+	EntryDate    string  `json:"entry_date"`
+	Value        float64 `json:"value"`
+	Notes        *string `json:"notes,omitempty"`
+	CreatedAt    string  `json:"created_at"`
 }
 
 // CreateExercise inserts a new exercise
-func (db *DB) CreateExercise(name, exerciseType, category string) (int64, error) {
+func (db *DB) CreateExercise(name, exerciseType, category string, targetSets, targetReps *int, targetWeight *float64) (int64, error) {
 	result, err := db.Exec(
-		"INSERT INTO exercises (name, type, category) VALUES (?, ?, ?)",
-		name, exerciseType, nullString(category),
+		"INSERT INTO exercises (name, type, category, target_sets, target_reps, target_weight) VALUES (?, ?, ?, ?, ?, ?)",
+		name, exerciseType, nullString(category), targetSets, targetReps, targetWeight,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create exercise: %w", err)
@@ -140,9 +209,9 @@ func (db *DB) GetExerciseByName(name string) (*Exercise, error) {
 	var ex Exercise
 	var category sql.NullString
 	err := db.QueryRow(
-		"SELECT id, name, type, category, created_at FROM exercises WHERE name = ?",
+		"SELECT id, name, type, category, target_sets, target_reps, target_weight, created_at FROM exercises WHERE name = ?",
 		name,
-	).Scan(&ex.ID, &ex.Name, &ex.Type, &category, &ex.CreatedAt)
+	).Scan(&ex.ID, &ex.Name, &ex.Type, &category, &ex.TargetSets, &ex.TargetReps, &ex.TargetWeight, &ex.CreatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -163,9 +232,9 @@ func (db *DB) GetExerciseByID(id int) (*Exercise, error) {
 	var ex Exercise
 	var category sql.NullString
 	err := db.QueryRow(
-		"SELECT id, name, type, category, created_at FROM exercises WHERE id = ?",
+		"SELECT id, name, type, category, target_sets, target_reps, target_weight, created_at FROM exercises WHERE id = ?",
 		id,
-	).Scan(&ex.ID, &ex.Name, &ex.Type, &category, &ex.CreatedAt)
+	).Scan(&ex.ID, &ex.Name, &ex.Type, &category, &ex.TargetSets, &ex.TargetReps, &ex.TargetWeight, &ex.CreatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -182,10 +251,10 @@ func (db *DB) GetExerciseByID(id int) (*Exercise, error) {
 }
 
 // CreateRoutine inserts a new routine entry
-func (db *DB) CreateRoutine(exerciseID int, dayOfWeek string, orderIndex int, targetSets, targetReps *int, targetWeight *float64, notes *string) (int64, error) {
+func (db *DB) CreateRoutine(exerciseID int, dayOfWeek string, orderIndex int, notes *string) (int64, error) {
 	result, err := db.Exec(
-		"INSERT INTO routines (exercise_id, day_of_week, order_index, target_sets, target_reps, target_weight, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		exerciseID, dayOfWeek, orderIndex, targetSets, targetReps, targetWeight, notes,
+		"INSERT INTO routines (exercise_id, day_of_week, order_index, notes) VALUES (?, ?, ?, ?)",
+		exerciseID, dayOfWeek, orderIndex, notes,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create routine: %w", err)
@@ -208,18 +277,6 @@ func (db *DB) CreateHistory(exerciseID int, sessionDate string, weight *float64,
 		return 0, fmt.Errorf("failed to create history: %w", err)
 	}
 	return result.LastInsertId()
-}
-
-// CreateProgression inserts a new progression entry
-func (db *DB) CreateProgression(exerciseID int, currentWeight *float64, consecutiveSuccesses int, readyToProgress bool, lastDone *string) error {
-	_, err := db.Exec(
-		"INSERT OR REPLACE INTO exercise_progression (exercise_id, current_weight, consecutive_successes, ready_to_progress, last_done) VALUES (?, ?, ?, ?, ?)",
-		exerciseID, currentWeight, consecutiveSuccesses, readyToProgress, lastDone,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create progression: %w", err)
-	}
-	return nil
 }
 
 // CreateDayTitle inserts or updates a day title

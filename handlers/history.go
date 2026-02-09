@@ -70,7 +70,7 @@ func (h *HistoryHandler) getHistory(w http.ResponseWriter, r *http.Request, exer
 		FROM history
 		WHERE exercise_id = ?
 		ORDER BY session_date DESC
-		LIMIT 50
+		LIMIT 200
 	`
 
 	rows, err := h.DB.Query(query, exerciseID)
@@ -237,41 +237,6 @@ func (h *HistoryHandler) createHistory(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create history: %v", err), http.StatusInternalServerError)
 		return
-	}
-
-	// Update progression tracking
-	if req.Completed {
-		// Increment consecutive successes
-		var consecutiveSuccesses int
-		err := h.DB.QueryRow(`
-			SELECT COALESCE(consecutive_successes, 0) FROM exercise_progression WHERE exercise_id = ?
-		`, req.ExerciseID).Scan(&consecutiveSuccesses)
-
-		if err == sql.ErrNoRows {
-			// Create new progression entry
-			err = h.DB.CreateProgression(req.ExerciseID, req.Weight, 1, false, &req.SessionDate)
-		} else if err == nil {
-			consecutiveSuccesses++
-			readyToProgress := consecutiveSuccesses >= 3
-
-			_, err = h.DB.Exec(`
-				UPDATE exercise_progression
-				SET consecutive_successes = ?, ready_to_progress = ?, last_done = ?, current_weight = ?
-				WHERE exercise_id = ?
-			`, consecutiveSuccesses, readyToProgress, req.SessionDate, req.Weight, req.ExerciseID)
-		}
-
-		if err != nil {
-			// Log but don't fail the request
-			fmt.Printf("Warning: failed to update progression: %v\n", err)
-		}
-	} else {
-		// Reset consecutive successes on failure
-		_, err = h.DB.Exec(`
-			UPDATE exercise_progression
-			SET consecutive_successes = 0, ready_to_progress = 0, last_done = ?
-			WHERE exercise_id = ?
-		`, req.SessionDate, req.ExerciseID)
 	}
 
 	response := map[string]interface{}{

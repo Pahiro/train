@@ -18,8 +18,8 @@ const (
 type TrainJSON map[string]DayData
 
 type DayData struct {
-	Title     string            `json:"title"`
-	Exercises []ExerciseData    `json:"exercises"`
+	Title     string         `json:"title"`
+	Exercises []ExerciseData `json:"exercises"`
 }
 
 type ExerciseData struct {
@@ -40,11 +40,11 @@ type Target struct {
 }
 
 type HistoryData struct {
-	Date      string    `json:"date"`
-	Weight    float64   `json:"weight"`
-	Sets      []int     `json:"sets"`
-	Completed bool      `json:"completed"`
-	Volume    float64   `json:"volume"`
+	Date      string  `json:"date"`
+	Weight    float64 `json:"weight"`
+	Sets      []int   `json:"sets"`
+	Completed bool    `json:"completed"`
+	Volume    float64 `json:"volume"`
 }
 
 // ShouldMigrate checks if migration is needed
@@ -139,7 +139,7 @@ func migrateData(db *DB, trainData TrainJSON) error {
 	// Insert unique exercises
 	log.Printf("Migrating %d unique exercises...", len(uniqueExercises))
 	for _, info := range uniqueExercises {
-		id, err := db.CreateExercise(info.Name, info.Type, info.Category)
+		id, err := db.CreateExercise(info.Name, info.Type, info.Category, nil, nil, nil)
 		if err != nil {
 			return fmt.Errorf("failed to create exercise %s: %w", info.Name, err)
 		}
@@ -221,11 +221,8 @@ func migrateData(db *DB, trainData TrainJSON) error {
 		}
 	}
 
-	// Step 3: Create routines and progression tracking
+	// Step 3: Create routines
 	log.Printf("Migrating routines...")
-
-	// Track progression per exercise (latest state)
-	progressionMap := make(map[int]*Progression)
 
 	for day, dayData := range trainData {
 		// Insert day title
@@ -255,52 +252,50 @@ func migrateData(db *DB, trainData TrainJSON) error {
 				if ex.Type == "weight" && ex.CurrentWeight > 0 {
 					targetWeight = nullFloat(ex.CurrentWeight)
 				}
+				// Store targets on the exercise itself
+				if targetSets != nil || targetReps != nil || targetWeight != nil {
+					updateQuery := "UPDATE exercises SET"
+					updateArgs := []interface{}{}
+					first := true
+					if targetSets != nil {
+						updateQuery += " target_sets = ?"
+						updateArgs = append(updateArgs, *targetSets)
+						first = false
+					}
+					if targetReps != nil {
+						if !first {
+							updateQuery += ","
+						}
+						updateQuery += " target_reps = ?"
+						updateArgs = append(updateArgs, *targetReps)
+						first = false
+					}
+					if targetWeight != nil {
+						if !first {
+							updateQuery += ","
+						}
+						updateQuery += " target_weight = ?"
+						updateArgs = append(updateArgs, *targetWeight)
+					}
+					updateQuery += " WHERE id = ? AND target_sets IS NULL"
+					updateArgs = append(updateArgs, exerciseID)
+					db.Exec(updateQuery, updateArgs...)
+				}
 			} else {
 				// Cardio exercise - store text in notes
 				notes = &ex.Text
 			}
 
-			// Create routine entry
+			// Create routine entry (no targets - they're on the exercise now)
 			_, err := db.CreateRoutine(
 				exerciseID,
 				day,
 				orderIndex,
-				targetSets,
-				targetReps,
-				targetWeight,
 				notes,
 			)
 			if err != nil {
 				return fmt.Errorf("failed to create routine: %w", err)
 			}
-
-			// Track progression (keep most recent data for each exercise)
-			if ex.Type == "weight" || ex.Type == "bodyweight" {
-				if _, exists := progressionMap[exerciseID]; !exists || ex.LastDone != nil {
-					progressionMap[exerciseID] = &Progression{
-						ExerciseID:           exerciseID,
-						CurrentWeight:        nullFloat(ex.CurrentWeight),
-						ConsecutiveSuccesses: ex.ConsecutiveSuccesses,
-						ReadyToProgress:      ex.ReadyToProgress,
-						LastDone:             ex.LastDone,
-					}
-				}
-			}
-		}
-	}
-
-	// Step 4: Insert progression data
-	log.Printf("Migrating progression data...")
-	for _, prog := range progressionMap {
-		err := db.CreateProgression(
-			prog.ExerciseID,
-			prog.CurrentWeight,
-			prog.ConsecutiveSuccesses,
-			prog.ReadyToProgress,
-			prog.LastDone,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create progression: %w", err)
 		}
 	}
 

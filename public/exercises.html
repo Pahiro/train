@@ -104,6 +104,25 @@
                         <small class="form-hint">Categories help organize exercises by muscle group and movement pattern</small>
                     </div>
 
+                    <div class="form-group targets-group" id="targets-group">
+                        <label>Targets</label>
+                        <small class="form-hint">These targets apply everywhere this exercise is used</small>
+                        <div class="targets-grid">
+                            <div class="form-group">
+                                <label for="exercise-target-sets">Sets</label>
+                                <input type="number" id="exercise-target-sets" placeholder="3" min="1" max="20" step="1">
+                            </div>
+                            <div class="form-group">
+                                <label for="exercise-target-reps">Reps</label>
+                                <input type="number" id="exercise-target-reps" placeholder="10" min="1" max="100" step="1">
+                            </div>
+                            <div class="form-group">
+                                <label for="exercise-target-weight">Weight (kg)</label>
+                                <input type="number" id="exercise-target-weight" placeholder="0" min="0" step="0.5">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-actions">
                         <button type="button" class="btn btn-secondary" id="cancel-btn">Cancel</button>
                         <button type="submit" class="btn btn-primary" id="save-btn">Save Exercise</button>
