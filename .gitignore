@@ -3,3 +3,4 @@
 *.json
 !package.json
 !package-lock.json
+deploy.local.mk
