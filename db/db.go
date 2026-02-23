@@ -85,21 +85,49 @@ func migrateTargetsToExercises(db *sql.DB) error {
 		}
 	}
 
-	// Copy target values from routines to exercises (take the first non-null value per exercise)
-	_, err = db.Exec(`
-		UPDATE exercises SET
-			target_sets = COALESCE(target_sets, (SELECT r.target_sets FROM routines r WHERE r.exercise_id = exercises.id AND r.target_sets IS NOT NULL LIMIT 1)),
-			target_reps = COALESCE(target_reps, (SELECT r.target_reps FROM routines r WHERE r.exercise_id = exercises.id AND r.target_reps IS NOT NULL LIMIT 1)),
-			target_weight = COALESCE(target_weight, (SELECT r.target_weight FROM routines r WHERE r.exercise_id = exercises.id AND r.target_weight IS NOT NULL LIMIT 1))
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to copy targets: %w", err)
+	// Check if exercise_progression table exists (old schema had it for storing live weight)
+	var epExists int
+	db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='exercise_progression'`).Scan(&epExists)
+
+	// Copy target values from routines to exercises.
+	// For target_weight, prefer exercise_progression.current_weight (the actual working weight)
+	// over the routine's initial value, since progression tracking may have advanced it.
+	// Use ORDER BY id to get a consistent row when different days have different values.
+	var copyErr error
+	if epExists > 0 {
+		_, copyErr = db.Exec(`
+			UPDATE exercises SET
+				target_sets = COALESCE(target_sets, (SELECT r.target_sets FROM routines r WHERE r.exercise_id = exercises.id AND r.target_sets IS NOT NULL ORDER BY r.id LIMIT 1)),
+				target_reps = COALESCE(target_reps, (SELECT r.target_reps FROM routines r WHERE r.exercise_id = exercises.id AND r.target_reps IS NOT NULL ORDER BY r.id LIMIT 1)),
+				target_weight = COALESCE(target_weight,
+					(SELECT ep.current_weight FROM exercise_progression ep WHERE ep.exercise_id = exercises.id AND ep.current_weight IS NOT NULL),
+					(SELECT r.target_weight FROM routines r WHERE r.exercise_id = exercises.id AND r.target_weight IS NOT NULL ORDER BY r.id LIMIT 1))
+		`)
+	} else {
+		_, copyErr = db.Exec(`
+			UPDATE exercises SET
+				target_sets = COALESCE(target_sets, (SELECT r.target_sets FROM routines r WHERE r.exercise_id = exercises.id AND r.target_sets IS NOT NULL ORDER BY r.id LIMIT 1)),
+				target_reps = COALESCE(target_reps, (SELECT r.target_reps FROM routines r WHERE r.exercise_id = exercises.id AND r.target_reps IS NOT NULL ORDER BY r.id LIMIT 1)),
+				target_weight = COALESCE(target_weight, (SELECT r.target_weight FROM routines r WHERE r.exercise_id = exercises.id AND r.target_weight IS NOT NULL ORDER BY r.id LIMIT 1))
+		`)
+	}
+	if copyErr != nil {
+		return fmt.Errorf("failed to copy targets: %w", copyErr)
 	}
 
-	// Recreate routines table without target columns
-	// SQLite doesn't support DROP COLUMN in older versions, so we recreate
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS routines_new (
+	// Clean up orphaned routines (exercise was deleted but routine still references it).
+	// These would violate the FK constraint on the new table.
+	if _, err := db.Exec(`DELETE FROM routines WHERE exercise_id NOT IN (SELECT id FROM exercises)`); err != nil {
+		return fmt.Errorf("failed to clean orphaned routines: %w", err)
+	}
+
+	// Recreate routines table without target columns.
+	// database/sql does not support multi-statement queries, so each statement is a separate Exec call.
+	if _, err := db.Exec(`DROP TABLE IF EXISTS routines_new`); err != nil {
+		return fmt.Errorf("failed to drop routines_new: %w", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE routines_new (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			exercise_id INTEGER NOT NULL,
 			day_of_week TEXT NOT NULL CHECK(day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')),
@@ -107,14 +135,21 @@ func migrateTargetsToExercises(db *sql.DB) error {
 			notes TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
-		);
+		)
+	`); err != nil {
+		return fmt.Errorf("failed to create routines_new: %w", err)
+	}
+	if _, err := db.Exec(`
 		INSERT INTO routines_new (id, exercise_id, day_of_week, order_index, notes, created_at)
-			SELECT id, exercise_id, day_of_week, order_index, notes, created_at FROM routines;
-		DROP TABLE routines;
-		ALTER TABLE routines_new RENAME TO routines;
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to recreate routines table: %w", err)
+			SELECT id, exercise_id, day_of_week, order_index, notes, created_at FROM routines
+	`); err != nil {
+		return fmt.Errorf("failed to copy routines data: %w", err)
+	}
+	if _, err := db.Exec(`DROP TABLE routines`); err != nil {
+		return fmt.Errorf("failed to drop old routines: %w", err)
+	}
+	if _, err := db.Exec(`ALTER TABLE routines_new RENAME TO routines`); err != nil {
+		return fmt.Errorf("failed to rename routines_new: %w", err)
 	}
 
 	// Recreate indexes
