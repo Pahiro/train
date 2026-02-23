@@ -508,22 +508,52 @@ window.toggleExercise = async (index) => {
     const ex = state.exercises[index];
     const today = getTodayDateString();
 
-    // Toggle logic: If done today, clear it. Else, set to today.
-    const newLastDone = (ex.last_done === today) ? null : today;
+    // Extract date part from ISO datetime
+    const lastDoneDate = ex.last_done ? ex.last_done.split('T')[0] : null;
 
-    // Update via API
-    try {
-        await fetch(`/api/routines/${ex.routine_id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ last_done: newLastDone })
-        });
+    // Toggle logic: If done today, delete today's history entry. Else, create one.
+    if (lastDoneDate === today) {
+        // Find and delete today's history entry
+        try {
+            // We need to find the history ID for today's entry
+            const historyRes = await fetch(`/api/history/${ex.exercise_id}`);
+            const historyData = await historyRes.json();
+            const todayEntry = historyData.history.find(h => h.session_date === today || h.session_date.startsWith(today));
+            
+            if (todayEntry) {
+                await fetch(`/api/history/${todayEntry.id}`, {
+                    method: 'DELETE'
+                });
+            }
 
-        // Update local state
-        ex.last_done = newLastDone;
-        renderWorkout();
-    } catch (err) {
-        console.error('Failed to toggle exercise:', err);
+            // Reload data
+            await loadDayData(state.selectedDay);
+            renderWorkout();
+        } catch (err) {
+            console.error('Failed to toggle exercise:', err);
+        }
+    } else {
+        // Create new history entry for today
+        try {
+            await fetch('/api/history', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    exercise_id: ex.exercise_id,
+                    session_date: today,
+                    weight: 0,
+                    sets_completed: [1],  // Simple completion marker for cardio
+                    completed: true,
+                    volume: 0
+                })
+            });
+
+            // Reload data
+            await loadDayData(state.selectedDay);
+            renderWorkout();
+        } catch (err) {
+            console.error('Failed to toggle exercise:', err);
+        }
     }
 };
 
