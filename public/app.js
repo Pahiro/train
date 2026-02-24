@@ -155,7 +155,7 @@ function renderWorkout() {
             <div class="edit-mode">
                 <ul id="exercise-list">
                     ${exercises.map((ex, idx) => {
-            const isWeight = ex.type === 'weight';
+            const isWeight = ex.type === 'weight' || ex.type === 'assisted';
             return `
                         <li draggable="true" data-index="${idx}" class="draggable-item edit-item">
                             <div class="edit-item-header">
@@ -210,7 +210,7 @@ function renderWorkout() {
             const isDone = lastDoneDate === today && state.selectedDay === getCurrentDayOfWeek();
 
             // Weight training exercise - clickable for detail view
-            if (ex.type === 'weight') {
+            if (ex.type === 'weight' || ex.type === 'assisted') {
                 return `
                     <li>
                         <div class="exercise-item weight-exercise" onclick="openExerciseDetail(${idx})">
@@ -224,7 +224,7 @@ function renderWorkout() {
                                 </span>
                                 <span class="exercise-meta">
                                     ${ex.target_sets}×${ex.target_reps} @ ${ex.target_weight || 0}kg
-                                    ${ex.ready_to_progress ? '<span class="progress-badge">📈 Ready!</span>' : ''}
+                                    ${ex.ready_to_progress ? `<span class="progress-badge">${ex.type === 'assisted' ? '📉 Ready!' : '📈 Ready!'}</span>` : ''}
                                 </span>
                             </div>
                             <svg class="chevron-icon" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
@@ -855,6 +855,7 @@ function getTypeBadgeColor(type) {
     const colors = {
         weight: '#00E5FF',
         bodyweight: '#00C853',
+        assisted: '#B388FF',
         cardio: '#FF9800'
     };
     return colors[type] || '#888';
@@ -1169,6 +1170,7 @@ async function renderExerciseModal() {
     const history = state.modal.history || [];
     const pr = state.modal.pr;
     const isBodyweight = exercise.type === 'bodyweight';
+    const isAssisted = exercise.type === 'assisted';
 
     // Initialize current session if not set
     if (state.modal.currentSession.sets.length === 0) {
@@ -1186,8 +1188,11 @@ async function renderExerciseModal() {
     const totalReps = state.modal.currentSession.sets.reduce((sum, reps) => sum + (parseInt(reps) || 0), 0);
     const currentVolume = isBodyweight ? totalReps : totalReps * state.modal.currentSession.weight;
 
-    // Check if current session would be a PR (weight PR for weight exercises, not applicable for bodyweight)
-    const wouldBePR = !isBodyweight && pr && state.modal.currentSession.weight > pr.weight;
+    // Check if current session would be a PR.
+    // For assisted: PR = lower weight (less assistance). For weight: PR = higher weight.
+    const wouldBePR = !isBodyweight && pr && (isAssisted
+        ? state.modal.currentSession.weight < pr.weight
+        : state.modal.currentSession.weight > pr.weight);
 
     const modalHTML = `
         <div class="modal-overlay" onclick="closeExerciseDetail()">
@@ -1222,7 +1227,7 @@ async function renderExerciseModal() {
                         <div class="progression-alert">
                             <span class="progress-icon">🎯</span>
                             <div>
-                                <strong>${isBodyweight ? 'Ready to increase reps!' : 'Ready to increase weight!'}</strong>
+                                <strong>${isBodyweight ? 'Ready to increase reps!' : isAssisted ? 'Ready to decrease weight! 💪' : 'Ready to increase weight!'}</strong>
                                 <p>${exercise.consecutive_successes} consecutive successful sessions</p>
                             </div>
                         </div>

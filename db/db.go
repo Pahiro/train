@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 const dbPath = "train.db"
@@ -18,7 +19,7 @@ type DB struct {
 
 // Open opens the database connection and initializes the schema
 func Open() (*DB, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -55,7 +56,117 @@ func initSchema(db *sql.DB) error {
 		return fmt.Errorf("failed to migrate targets: %w", err)
 	}
 
+	// Run migration to add 'assisted' to exercise type constraint
+	if err := migrateExerciseTypeConstraint(db); err != nil {
+		return fmt.Errorf("failed to migrate exercise type constraint: %w", err)
+	}
+
 	return nil
+}
+
+// migrateExerciseTypeConstraint recreates the exercises table if the CHECK
+// constraint does not yet include the 'assisted' type.
+func migrateExerciseTypeConstraint(db *sql.DB) error {
+	var createSQL string
+	err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name='exercises'`).Scan(&createSQL)
+	if err != nil {
+		return nil // Fresh DB; schema.sql already has the correct constraint.
+	}
+	if strings.Contains(createSQL, "assisted") {
+		return nil // Already up to date.
+	}
+
+	// Disable FK checks for the duration of the table swap.
+	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return fmt.Errorf("failed to disable foreign keys: %w", err)
+	}
+	defer db.Exec(`PRAGMA foreign_keys = ON`)
+
+	stmts := []string{
+		`DROP TABLE IF EXISTS exercises_new`,
+		`CREATE TABLE exercises_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL UNIQUE,
+			type TEXT NOT NULL CHECK(type IN ('cardio', 'weight', 'bodyweight', 'assisted')),
+			category TEXT CHECK(category IN ('Legs-Push', 'Legs-Pull', 'Arms-Push', 'Arms-Pull', 'Core-Push', 'Core-Pull')),
+			target_sets INTEGER,
+			target_reps INTEGER,
+			target_weight REAL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`INSERT INTO exercises_new SELECT id, name, type, category, target_sets, target_reps, target_weight, created_at, updated_at FROM exercises`,
+		`DROP TABLE exercises`,
+		`ALTER TABLE exercises_new RENAME TO exercises`,
+		`CREATE INDEX IF NOT EXISTS idx_exercises_name ON exercises(name)`,
+		`CREATE INDEX IF NOT EXISTS idx_exercises_type ON exercises(type)`,
+		`CREATE INDEX IF NOT EXISTS idx_exercises_category ON exercises(category)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("failed to migrate exercise type constraint: %w", err)
+		}
+	}
+	return nil
+}
+
+// OpenForTesting opens an in-memory SQLite database suitable for unit tests.
+func OpenForTesting() (*DB, error) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		return nil, fmt.Errorf("failed to open test database: %w", err)
+	}
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+	// Inline the schema for tests (no file I/O dependency).
+	schemaStmts := []string{
+		`CREATE TABLE IF NOT EXISTS exercises (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL UNIQUE,
+			type TEXT NOT NULL CHECK(type IN ('cardio', 'weight', 'bodyweight', 'assisted')),
+			category TEXT,
+			target_sets INTEGER,
+			target_reps INTEGER,
+			target_weight REAL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			exercise_id INTEGER NOT NULL,
+			session_date DATE NOT NULL,
+			weight REAL,
+			sets_completed TEXT NOT NULL,
+			completed BOOLEAN NOT NULL DEFAULT 0,
+			volume REAL,
+			is_pr BOOLEAN DEFAULT 0,
+			notes TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS routines (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			exercise_id INTEGER NOT NULL,
+			day_of_week TEXT NOT NULL,
+			order_index INTEGER NOT NULL,
+			notes TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS day_titles (
+			day_of_week TEXT PRIMARY KEY,
+			title TEXT NOT NULL DEFAULT ''
+		)`,
+	}
+	for _, stmt := range schemaStmts {
+		if _, err := db.Exec(stmt); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("failed to init test schema: %w", err)
+		}
+	}
+	return &DB{db}, nil
 }
 
 // migrateTargetsToExercises moves target_sets/reps/weight from routines to exercises (one-time)

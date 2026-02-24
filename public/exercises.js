@@ -123,7 +123,7 @@ function setupEventListeners() {
             dom.exerciseCategory.disabled = false;
             dom.targetsGroup.style.display = 'block';
             // Show/hide weight field based on type
-            dom.exerciseTargetWeight.closest('.form-group').style.display = 
+            dom.exerciseTargetWeight.closest('.form-group').style.display =
                 e.target.value === 'bodyweight' ? 'none' : 'block';
         }
     });
@@ -216,6 +216,7 @@ function createExerciseCard(exercise) {
     const typeColors = {
         weight: '#00E5FF',
         bodyweight: '#00C853',
+        assisted: '#B388FF',
         cardio: '#FF9800'
     };
 
@@ -284,7 +285,7 @@ function openEditModal(exerciseId) {
         dom.targetsGroup.style.display = 'none';
     } else {
         dom.targetsGroup.style.display = 'block';
-        dom.exerciseTargetWeight.closest('.form-group').style.display = 
+        dom.exerciseTargetWeight.closest('.form-group').style.display =
             exercise.type === 'bodyweight' ? 'none' : 'block';
     }
 
@@ -319,7 +320,7 @@ async function handleSubmit(e) {
     // Gather targets
     const targetSets = type !== 'cardio' && dom.exerciseTargetSets.value ? parseInt(dom.exerciseTargetSets.value) : null;
     const targetReps = type !== 'cardio' && dom.exerciseTargetReps.value ? parseInt(dom.exerciseTargetReps.value) : null;
-    const targetWeight = type === 'weight' && dom.exerciseTargetWeight.value ? parseFloat(dom.exerciseTargetWeight.value) : null;
+    const targetWeight = (type === 'weight' || type === 'assisted') && dom.exerciseTargetWeight.value ? parseFloat(dom.exerciseTargetWeight.value) : null;
 
     if (!name || !type) {
         alert('Please fill in all required fields');

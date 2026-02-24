@@ -204,14 +204,31 @@ func (h *HistoryHandler) createHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if this is a new PR
+	// For 'assisted' exercises, a PR is a *lower* weight (less assistance needed).
+	// For all other weighted exercises, a PR is a higher weight.
 	isPR := false
 	if req.Weight != nil && *req.Weight > 0 {
-		var maxWeight sql.NullFloat64
-		err := h.DB.QueryRow(`
-			SELECT MAX(weight) FROM history WHERE exercise_id = ?
-		`, req.ExerciseID).Scan(&maxWeight)
+		var exerciseType string
+		h.DB.QueryRow(`SELECT type FROM exercises WHERE id = ?`, req.ExerciseID).Scan(&exerciseType)
 
-		if err == nil && (!maxWeight.Valid || *req.Weight > maxWeight.Float64) {
+		var compareWeight sql.NullFloat64
+		var err error
+		if exerciseType == "assisted" {
+			err = h.DB.QueryRow(`SELECT MIN(weight) FROM history WHERE exercise_id = ?`, req.ExerciseID).Scan(&compareWeight)
+		} else {
+			err = h.DB.QueryRow(`SELECT MAX(weight) FROM history WHERE exercise_id = ?`, req.ExerciseID).Scan(&compareWeight)
+		}
+
+		isPRCondition := !compareWeight.Valid
+		if compareWeight.Valid {
+			if exerciseType == "assisted" {
+				isPRCondition = *req.Weight < compareWeight.Float64
+			} else {
+				isPRCondition = *req.Weight > compareWeight.Float64
+			}
+		}
+
+		if err == nil && isPRCondition {
 			isPR = true
 
 			// Clear old PR flags for this exercise

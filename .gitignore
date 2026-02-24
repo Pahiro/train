@@ -1,4 +1,5 @@
 /train
+*.exe
 *.db
 *.json
 !package.json
