@@ -48,31 +48,6 @@ function getCurrentDayOfWeek() {
     return days[new Date().getDay()];
 }
 
-// Helper: Parse exercise text to extract details
-// Example: "Leg Press: 3x15@60" -> { name: "Leg Press", sets: 3, reps: 15, weight: 60 }
-function parseExerciseText(text) {
-    // Pattern: "Name: SxR@W" where S=sets, R=reps, W=weight
-    const weightPattern = /^(.+?):\s*(\d+)x(\d+)@(\d+(?:\.\d+)?)\s*$/i;
-    const match = text.match(weightPattern);
-
-    if (match) {
-        return {
-            type: 'weight',
-            name: match[1].trim(),
-            sets: parseInt(match[2]),
-            reps: parseInt(match[3]),
-            weight: parseFloat(match[4])
-        };
-    }
-
-    // If no match, it's a cardio/text exercise
-    return {
-        type: 'cardio',
-        name: text
-    };
-}
-
-
 const dom = {
     daySelector: document.getElementById('day-selector'),
     workoutContainer: document.getElementById('workout-container'),
@@ -119,20 +94,6 @@ async function loadDayData(day) {
 }
 
 // Deprecated: migrateData() function removed - now using SQLite backend
-
-// Helper: Save data to backend
-async function saveData() {
-    try {
-        await fetch('/api/training', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(state.data)
-        });
-    } catch (err) {
-        console.error('Failed to save data:', err);
-    }
-}
-
 
 function renderDaySelector() {
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -301,154 +262,6 @@ function renderWorkout() {
     // Render modal if open
     if (state.modal.isOpen) {
         renderExerciseModal();
-    }
-}
-
-// Render Exercise Detail Modal
-function renderExerciseModal() {
-    const exerciseIndex = state.modal.exerciseIndex;
-    const exercise = state.exercises[exerciseIndex];
-    const today = getTodayDateString();
-
-    // Initialize current session if not set
-    if (state.modal.currentSession.sets.length === 0) {
-        state.modal.currentSession.sets = new Array(exercise.target_sets).fill('');
-        state.modal.currentSession.weight = exercise.target_weight || 0;
-    }
-
-    // Calculate if session is complete
-    const allSetsComplete = state.modal.currentSession.sets.every((reps, idx) => {
-        const repsNum = parseInt(reps);
-        return !isNaN(repsNum) && repsNum >= exercise.target_reps;
-    });
-
-    // Calculate current volume
-    const currentVolume = state.modal.currentSession.sets.reduce((sum, reps) => {
-        const repsNum = parseInt(reps) || 0;
-        return sum + (repsNum * state.modal.currentSession.weight);
-    }, 0);
-
-    // Get last 10 history entries for graph
-    const historyForGraph = exercise.history_data.slice(-10);
-
-    const modalHTML = `
-        <div class="modal-overlay" onclick="closeExerciseDetail()">
-            <div class="modal-content" onclick="event.stopPropagation()">
-                <div class="modal-header">
-                    <h2>${exercise.name}</h2>
-                    <button class="modal-close" onclick="closeExerciseDetail()" aria-label="Close">×</button>
-                </div>
-                
-                <div class="modal-body">
-                    <!-- Weight Control -->
-                    <div class="weight-section">
-                        <label>Current Weight</label>
-                        <div class="weight-control">
-                            <button class="weight-btn" onclick="adjustWeight(-1)">-</button>
-                            <span class="weight-display">${state.modal.currentSession.weight} kg</span>
-                            <button class="weight-btn" onclick="adjustWeight(1)">+</button>
-                        </div>
-                        <div class="target-display">Target: ${exercise.target_sets}×${exercise.target_reps}</div>
-                    </div>
-                    
-                    <!-- Progression Status -->
-                    ${exercise.readyToProgress ? `
-                        <div class="progression-alert">
-                            <span class="progress-icon">🎯</span>
-                            <div>
-                                <strong>Ready to increase weight!</strong>
-                                <p>${exercise.consecutiveSuccesses} consecutive successful sessions</p>
-                            </div>
-                        </div>
-                    ` : exercise.consecutiveSuccesses > 0 ? `
-                        <div class="progression-info">
-                            <span>${exercise.consecutiveSuccesses}/${3} successful sessions</span>
-                        </div>
-                    ` : ''}
-                    
-                    <!-- Set Tracker -->
-                    <div class="set-tracker-section">
-                        <label>Today's Sets</label>
-                        <div class="set-tracker">
-                            ${state.modal.currentSession.sets.map((_, idx) => `
-                                <div class="set-input-group">
-                                    <label>Set ${idx + 1}</label>
-                                    <div class="set-input-controls">
-                                        <button class="set-adjust-btn" onclick="adjustSetReps(${idx}, -1)">-</button>
-                                        <span
-                                            class="set-input ${state.modal.currentSession.sets[idx] === '' ? 'set-input-empty' : ''}"
-                                            onclick="fillTargetReps(${idx}, ${exercise.target_reps})"
-                                        >${state.modal.currentSession.sets[idx] === '' ? '-' : state.modal.currentSession.sets[idx]}</span>
-                                        <button class="set-adjust-btn" onclick="adjustSetReps(${idx}, 1)">+</button>
-                                    </div>
-                                    <span class="reps-label">reps</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                        
-                        <div class="session-stats">
-                            <div class="stat">
-                                <span class="stat-label">Volume</span>
-                                <span class="stat-value">${currentVolume} kg</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">Status</span>
-                                <span class="stat-value ${allSetsComplete ? 'success' : 'incomplete'}">
-                                    ${allSetsComplete ? '✓ Complete' : 'Incomplete'}
-                                </span>
-                            </div>
-                        </div>
-                        
-                        <button class="btn-primary btn-complete" onclick="completeExerciseSession()">
-                            Complete Session
-                        </button>
-                    </div>
-                    
-                    <!-- History Section -->
-                    ${exercise.history_data.length > 0 ? `
-                        <div class="history-section">
-                            <h3>History</h3>
-                            
-                            <!-- Weight Progression Graph -->
-                            <div class="graph-container">
-                                <canvas id="weight-graph" width="400" height="200"></canvas>
-                            </div>
-                            
-                            <!-- Recent Sessions -->
-                            <div class="history-list">
-                                ${exercise.history_data.slice(-5).reverse().map(session => `
-                                    <div class="history-card ${session.completed ? 'completed' : 'incomplete'}">
-                                        <div class="history-header">
-                                            <span class="history-date">${session.date}</span>
-                                            <span class="history-status">${session.completed ? '✓' : '✗'}</span>
-                                        </div>
-                                        <div class="history-details">
-                                            <span>${session.weight}kg</span>
-                                            <span class="history-sets">${session.sets.join(', ')} reps</span>
-                                            <span class="history-volume">${session.volume}kg total</span>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : '<div class="no-history">No history yet. Complete your first session!</div>'}
-                </div>
-            </div>
-        </div>
-    `;
-
-    // Insert modal into DOM
-    let modalContainer = document.getElementById('exercise-modal');
-    if (!modalContainer) {
-        modalContainer = document.createElement('div');
-        modalContainer.id = 'exercise-modal';
-        document.body.appendChild(modalContainer);
-    }
-    modalContainer.innerHTML = modalHTML;
-
-    // Render graph if there's history
-    if (historyForGraph.length > 0) {
-        setTimeout(() => renderWeightGraph(historyForGraph), 50);
     }
 }
 
@@ -866,21 +679,6 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML.replace(/'/g, '&#39;');
 }
-// Updated exercise modal functions for new API
-
-window.openExerciseDetail = (index) => {
-    state.modal.isOpen = true;
-    state.modal.exerciseIndex = index;
-    const exercise = state.exercises[index];
-    state.modal.exerciseId = exercise.exercise_id;
-
-    // Initialize current session
-    state.modal.currentSession.sets = new Array(exercise.target_sets || 3).fill('');
-    state.modal.currentSession.weight = exercise.target_weight || 0;
-
-    renderExerciseModal();
-};
-
 window.closeExerciseDetail = () => {
     state.modal.isOpen = false;
     state.modal.exerciseIndex = null;
