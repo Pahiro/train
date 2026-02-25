@@ -122,33 +122,23 @@ function renderWorkout() {
                 <ul id="exercise-list">
                     ${exercises.map((ex, idx) => {
             const isWeight = ex.type === 'weight' || ex.type === 'assisted';
+            const isBodyweight = ex.type === 'bodyweight';
             return `
                         <li data-index="${idx}" class="draggable-item edit-item">
-                            <div class="edit-item-header">
-                                <span class="drag-handle" aria-label="Drag to reorder">::</span>
-                                <span class="exercise-type-label">${isWeight ? 'Weight Training' : 'Cardio'}</span>
+                            <div class="edit-item-row">
+                                <span class="drag-handle" aria-label="Drag to reorder">⠿</span>
+                                <div class="edit-item-info">
+                                    <strong class="edit-item-name">${ex.name}</strong>
+                                    ${isWeight ? `<span class="edit-item-meta">${ex.target_sets || 3}×${ex.target_reps || 10} @ ${ex.target_weight || 0}kg</span>` : ''}
+                                    ${isBodyweight ? `<span class="edit-item-meta">${ex.target_sets || 3}×${ex.target_reps || 10}</span>` : ''}
+                                </div>
                                 <button class="btn-remove" onclick="removeExercise(${idx})" aria-label="Remove exercise">×</button>
                             </div>
-
-                            <div class="edit-item-body">
-                                ${isWeight ? `
-                                    <div class="edit-field exercise-name-display">
-                                        <strong>${ex.name}</strong>
-                                        <small style="color: var(--text-secondary); font-size: 12px;">
-                                            ${ex.target_sets || 3}×${ex.target_reps || 10} @ ${ex.target_weight || 0}kg
-                                            — Edit targets in the Exercise Library
-                                        </small>
-                                    </div>
-                                ` : `
-                                    <div class="edit-field exercise-name-display">
-                                        <strong>${ex.name}</strong>
-                                    </div>
-                                    <div class="edit-field">
-                                        <label>Notes</label>
-                                        <input type="text" value="${ex.notes || ex.text || ''}" data-index="${idx}" class="exercise-input" aria-label="Exercise Notes" placeholder="e.g. 30 mins @ 5 km/h">
-                                    </div>
-                                `}
-                            </div>
+                            ${ex.type === 'cardio' ? `
+                                <div class="edit-item-notes">
+                                    <input type="text" value="${ex.notes || ex.text || ''}" data-index="${idx}" class="exercise-input" aria-label="Exercise Notes" placeholder="e.g. 30 mins @ 5 km/h">
+                                </div>
+                            ` : ''}
                         </li>
                     `}).join('')}
                 </ul>
@@ -452,18 +442,20 @@ window.saveChanges = async () => {
 
 // Deprecated: updateStateFromInputs() function removed - now using API-based updates
 
-// Drag and Drop Functions (pointer-based for touch + mouse support)
+// Drag and Drop Functions (touch + mouse support)
 function attachDragListeners() {
     const list = document.getElementById('exercise-list');
     if (!list) return;
 
     list.querySelectorAll('.drag-handle').forEach(handle => {
-        handle.addEventListener('pointerdown', onDragPointerDown);
+        handle.addEventListener('mousedown', onDragStart);
+        handle.addEventListener('touchstart', onDragStart, { passive: false });
     });
 }
 
-function onDragPointerDown(e) {
-    if (e.button !== 0) return; // primary pointer only
+function onDragStart(e) {
+    // Only primary mouse button
+    if (e.type === 'mousedown' && e.button !== 0) return;
     e.preventDefault();
 
     const handle = e.currentTarget;
@@ -471,17 +463,15 @@ function onDragPointerDown(e) {
     const list = document.getElementById('exercise-list');
     if (!dragEl || !list) return;
 
-    // Capture pointer so we get events even outside the element
-    handle.setPointerCapture(e.pointerId);
-
     const items = [...list.children];
-    if (items.length < 2) return; // nothing to reorder
+    if (items.length < 2) return;
 
     const fromIndex = items.indexOf(dragEl);
-    const itemRects = items.map(el => el.getBoundingClientRect());
-    const startY = e.clientY;
+    const isTouch = e.type === 'touchstart';
+    const startY = isTouch ? e.touches[0].clientY : e.clientY;
 
-    // Calculate item slot height from actual positions
+    // Measure item heights from actual DOM
+    const itemRects = items.map(el => el.getBoundingClientRect());
     const itemHeight = items.length > 1
         ? itemRects[1].top - itemRects[0].top
         : itemRects[0].height + 12;
@@ -489,56 +479,62 @@ function onDragPointerDown(e) {
     let toIndex = fromIndex;
 
     dragEl.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    document.body.style.webkitUserSelect = 'none';
+
+    function getClientY(ev) {
+        if (ev.touches && ev.touches.length) return ev.touches[0].clientY;
+        if (ev.changedTouches && ev.changedTouches.length) return ev.changedTouches[0].clientY;
+        return ev.clientY;
+    }
 
     function onMove(ev) {
-        const dy = ev.clientY - startY;
+        ev.preventDefault();
+        const dy = getClientY(ev) - startY;
 
-        // Move dragged element with pointer
         dragEl.style.transform = `translateY(${dy}px)`;
 
-        // Calculate target index from displacement
         let newTo = fromIndex + Math.round(dy / itemHeight);
         newTo = Math.max(0, Math.min(items.length - 1, newTo));
 
         if (newTo !== toIndex) {
             toIndex = newTo;
-
-            // Shift other items to create a visual gap
             items.forEach((item, i) => {
                 if (i === fromIndex) return;
                 let shift = 0;
                 if (fromIndex < toIndex && i > fromIndex && i <= toIndex) {
-                    shift = -itemHeight; // shift up
+                    shift = -itemHeight;
                 } else if (fromIndex > toIndex && i >= toIndex && i < fromIndex) {
-                    shift = itemHeight;  // shift down
+                    shift = itemHeight;
                 }
                 item.style.transform = shift ? `translateY(${shift}px)` : '';
             });
         }
     }
 
-    async function onEnd() {
-        handle.removeEventListener('pointermove', onMove);
-        handle.removeEventListener('pointerup', onEnd);
-        handle.removeEventListener('pointercancel', onEnd);
+    async function onEnd(ev) {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onEnd);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onEnd);
+        document.removeEventListener('touchcancel', onEnd);
 
-        // Clear all transforms and classes
+        document.body.style.userSelect = '';
+        document.body.style.webkitUserSelect = '';
+
         items.forEach(item => {
             item.style.transform = '';
             item.classList.remove('dragging');
         });
 
         if (fromIndex !== toIndex) {
-            // Reorder local state
             const exercises = [...state.exercises];
             const [moved] = exercises.splice(fromIndex, 1);
             exercises.splice(toIndex, 0, moved);
             state.exercises = exercises;
 
-            // Re-render immediately so the list shows the new order
             renderWorkout();
 
-            // Persist to API
             const routineIds = exercises.map(ex => ex.routine_id);
             try {
                 const res = await fetch('/api/routines/reorder', {
@@ -562,9 +558,14 @@ function onDragPointerDown(e) {
         }
     }
 
-    handle.addEventListener('pointermove', onMove);
-    handle.addEventListener('pointerup', onEnd);
-    handle.addEventListener('pointercancel', onEnd);
+    if (isTouch) {
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onEnd);
+        document.addEventListener('touchcancel', onEnd);
+    } else {
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onEnd);
+    }
 }
 
 init();

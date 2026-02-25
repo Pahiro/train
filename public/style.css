@@ -344,21 +344,22 @@ button:active {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
     color: var(--text-secondary);
-    font-size: 1.4rem;
+    font-size: 1.3rem;
     cursor: grab;
-    margin-right: 4px;
     user-select: none;
-    touch-action: none; /* Required for pointer events on touch */
-    border-radius: 4px;
-    letter-spacing: 2px;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    border-radius: 6px;
+    letter-spacing: 1px;
 }
 
 .drag-handle:active {
     cursor: grabbing;
-    background: rgba(0, 229, 255, 0.1);
+    background: rgba(0, 229, 255, 0.15);
 }
 
 .draggable-item.dragging {
@@ -366,7 +367,7 @@ button:active {
     z-index: 10;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 229, 255, 0.4);
     background-color: rgba(0, 229, 255, 0.06);
-    transition: none; /* Follow pointer instantly, don't transition transform */
+    transition: none; /* Follow pointer instantly */
 }
 
 /* Enhanced Edit Mode Styles */
@@ -374,26 +375,55 @@ button:active {
     background-color: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    padding: 12px;
-    margin-bottom: 12px;
+    padding: 10px;
+    margin-bottom: 8px;
     cursor: default;
-    /* Reset cursor from list item */
-    flex-direction: column;
-    /* Stack header above body */
 }
 
-.edit-item-header {
+.edit-item-row {
     display: flex;
     align-items: center;
-    margin-bottom: 12px;
-    gap: 12px;
+    gap: 8px;
 }
 
-.edit-item-body {
+.edit-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.edit-item-name {
+    display: block;
+    font-size: 15px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.edit-item-meta {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.edit-item-notes {
+    padding: 8px 0 0 44px; /* align with name (handle width + gap) */
+}
+
+.edit-item-notes .exercise-input {
     width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    padding: 8px 10px;
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+}
+
+.edit-item-notes .exercise-input:focus {
+    border-color: var(--accent-color);
+    outline: none;
 }
 
 .type-selector {
@@ -458,15 +488,15 @@ button:active {
     outline: none;
 }
 
-/* Ensure remove button alignment */
-.edit-item-header .btn-remove {
-    margin-left: 0;
-}
-
 /* Draggable visual update */
 .edit-item.dragging {
     opacity: 0.9;
     border-color: var(--accent-color);
+}
+
+.edit-item .btn-remove {
+    margin-left: auto;
+    flex-shrink: 0;
 }
 
 /* Weight Exercise Styles */
