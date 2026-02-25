@@ -211,6 +211,24 @@ function renderExercises() {
     });
 }
 
+function getCategoryIndicator(category) {
+    const categoryIndicators = {
+        'Legs-Push': '🦵➡️',
+        'Legs-Pull': '🦵⬅️',
+        'Arms-Push': '💪➡️',
+        'Arms-Pull': '💪⬅️',
+        'Core-Push': '🎯➡️',
+        'Core-Pull': '🎯⬅️'
+    };
+    return categoryIndicators[category] || '';
+}
+
+function getCategoryDisplayLabel(category) {
+    if (!category) return '';
+    const indicator = getCategoryIndicator(category);
+    return indicator ? `${indicator} ${category}` : category;
+}
+
 // Create exercise card HTML
 function createExerciseCard(exercise) {
     const typeColors = {
@@ -221,7 +239,7 @@ function createExerciseCard(exercise) {
     };
 
     const typeColor = typeColors[exercise.type] || '#888';
-    const categoryText = exercise.category || 'No category';
+    const categoryText = getCategoryDisplayLabel(exercise.category);
 
     return `
         <div class="exercise-card clickable" data-id="${exercise.id}" data-name="${escapeHtml(exercise.name)}" title="Click to view history">
@@ -240,7 +258,7 @@ function createExerciseCard(exercise) {
                 <span class="exercise-badge" style="background: ${typeColor}22; color: ${typeColor}; border: 1px solid ${typeColor}">
                     ${exercise.type}
                 </span>
-                ${exercise.category ? `
+                ${categoryText ? `
                     <span class="exercise-category">${categoryText}</span>
                 ` : ''}
                 ${exercise.type !== 'cardio' && (exercise.target_sets || exercise.target_reps) ? `

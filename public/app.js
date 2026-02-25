@@ -21,6 +21,7 @@ const state = {
             sets: [],
             weight: null
         },
+        sessionDrafts: {},
         history: [],
         historyPage: 0,
         pr: null
@@ -32,6 +33,8 @@ const state = {
         searchQuery: ''
     }
 };
+
+const SESSION_DRAFTS_STORAGE_KEY = 'train-session-drafts-v1';
 
 // Helper: Get local date string YYYY-MM-DD
 function getTodayDateString() {
@@ -57,6 +60,8 @@ const dom = {
 
 async function init() {
     try {
+        loadSessionDraftsFromStorage();
+
         // Set initial day
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         state.selectedDay = days[new Date().getDay()];
@@ -172,6 +177,7 @@ function renderWorkout() {
 
             // Weight training exercise - clickable for detail view
             if (ex.type === 'weight' || ex.type === 'assisted') {
+                const categoryIcon = getCategoryIndicator(ex.category);
                 return `
                     <li>
                         <div class="exercise-item weight-exercise" onclick="openExerciseDetail(${idx})">
@@ -180,9 +186,12 @@ function renderWorkout() {
                                 onclick="event.stopPropagation(); event.preventDefault();"
                             >
                             <div class="exercise-content">
-                                <span class="exercise-text ${isDone ? 'done' : ''}">
-                                    ${ex.name}
-                                </span>
+                                <div class="exercise-name-row">
+                                    <span class="exercise-text ${isDone ? 'done' : ''}">
+                                        ${ex.name}
+                                    </span>
+                                    ${categoryIcon ? `<span class="exercise-category-indicator" title="${ex.category}" aria-label="${ex.category}">${categoryIcon}</span>` : ''}
+                                </div>
                                 <span class="exercise-meta">
                                     ${ex.target_sets}×${ex.target_reps} @ ${ex.target_weight || 0}kg
                                     ${ex.ready_to_progress ? `<span class="progress-badge">${ex.type === 'assisted' ? '📉 Ready!' : '📈 Ready!'}</span>` : ''}
@@ -197,6 +206,7 @@ function renderWorkout() {
             }
             // Bodyweight exercise - clickable for detail view (reps tracking)
             else if (ex.type === 'bodyweight') {
+                const categoryIcon = getCategoryIndicator(ex.category);
                 return `
                     <li>
                         <div class="exercise-item weight-exercise" onclick="openExerciseDetail(${idx})">
@@ -205,9 +215,12 @@ function renderWorkout() {
                                 onclick="event.stopPropagation(); event.preventDefault();"
                             >
                             <div class="exercise-content">
-                                <span class="exercise-text ${isDone ? 'done' : ''}">
-                                    ${ex.name}
-                                </span>
+                                <div class="exercise-name-row">
+                                    <span class="exercise-text ${isDone ? 'done' : ''}">
+                                        ${ex.name}
+                                    </span>
+                                    ${categoryIcon ? `<span class="exercise-category-indicator" title="${ex.category}" aria-label="${ex.category}">${categoryIcon}</span>` : ''}
+                                </div>
                                 <span class="exercise-meta">
                                     ${ex.target_sets}×${ex.target_reps} reps
                                     ${ex.ready_to_progress ? '<span class="progress-badge">📈 Ready!</span>' : ''}
@@ -536,6 +549,14 @@ function handleDragEnd(e) {
 
 init();
 
+window.addEventListener('beforeunload', () => {
+    if (state.modal.isOpen) {
+        saveCurrentSessionDraft();
+    } else {
+        persistSessionDraftsToStorage();
+    }
+});
+
 // ============================================
 // NEW: Exercise Library Integration
 // ============================================
@@ -674,12 +695,106 @@ function getTypeBadgeColor(type) {
     return colors[type] || '#888';
 }
 
+function getCategoryIndicator(category) {
+    const categoryIndicators = {
+        'Legs-Push': '🦵➡️',
+        'Legs-Pull': '🦵⬅️',
+        'Arms-Push': '💪➡️',
+        'Arms-Pull': '💪⬅️',
+        'Core-Push': '🎯➡️',
+        'Core-Pull': '🎯⬅️'
+    };
+    return categoryIndicators[category] || '';
+}
+
+function getCategoryDisplayLabel(category) {
+    if (!category) return '';
+    const indicator = getCategoryIndicator(category);
+    return indicator ? `${indicator} ${category}` : category;
+}
+
+function buildSessionDraftKey(dayOfWeek, exerciseId) {
+    return `${dayOfWeek}::${exerciseId}`;
+}
+
+function persistSessionDraftsToStorage() {
+    try {
+        localStorage.setItem(SESSION_DRAFTS_STORAGE_KEY, JSON.stringify(state.modal.sessionDrafts));
+    } catch (err) {
+        console.warn('Failed to persist session drafts:', err);
+    }
+}
+
+function loadSessionDraftsFromStorage() {
+    try {
+        const raw = localStorage.getItem(SESSION_DRAFTS_STORAGE_KEY);
+        if (!raw) return;
+
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+
+        const today = getTodayDateString();
+        const cleanedDrafts = {};
+
+        Object.entries(parsed).forEach(([key, value]) => {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+            if (!Array.isArray(value.sets)) return;
+            if (value.draftDate && value.draftDate !== today) return;
+
+            cleanedDrafts[key] = {
+                sets: value.sets.map((reps) => reps === null || reps === undefined ? '' : reps.toString()),
+                weight: typeof value.weight === 'number' ? value.weight : 0,
+                draftDate: value.draftDate || today
+            };
+        });
+
+        state.modal.sessionDrafts = cleanedDrafts;
+        persistSessionDraftsToStorage();
+    } catch (err) {
+        console.warn('Failed to load session drafts:', err);
+    }
+}
+
+function saveCurrentSessionDraft() {
+    const exerciseIndex = state.modal.exerciseIndex;
+    const exercise = exerciseIndex !== null ? state.exercises[exerciseIndex] : null;
+    const exerciseId = state.modal.exerciseId;
+    const dayOfWeek = state.selectedDay;
+    if (!exercise || !exerciseId || !dayOfWeek) return;
+
+    const draftKey = buildSessionDraftKey(dayOfWeek, exerciseId);
+
+    const currentSets = Array.isArray(state.modal.currentSession.sets)
+        ? state.modal.currentSession.sets
+        : [];
+    const hasAnySetInput = currentSets.some((reps) => `${reps ?? ''}`.trim() !== '');
+    const currentWeight = state.modal.currentSession.weight;
+    const hasChangedWeight = (exercise.type === 'weight' || exercise.type === 'assisted')
+        && currentWeight !== (exercise.target_weight || 0);
+
+    if (!hasAnySetInput && !hasChangedWeight) {
+        delete state.modal.sessionDrafts[draftKey];
+        persistSessionDraftsToStorage();
+        return;
+    }
+
+    state.modal.sessionDrafts[draftKey] = {
+        sets: currentSets.map((reps) => reps === null || reps === undefined ? '' : reps.toString()),
+        weight: currentWeight,
+        draftDate: getTodayDateString()
+    };
+    persistSessionDraftsToStorage();
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML.replace(/'/g, '&#39;');
 }
-window.closeExerciseDetail = () => {
+window.closeExerciseDetail = (saveDraft = true) => {
+    if (saveDraft) {
+        saveCurrentSessionDraft();
+    }
     state.modal.isOpen = false;
     state.modal.exerciseIndex = null;
     state.modal.exerciseId = null;
@@ -915,7 +1030,10 @@ window.completeExerciseSession = async () => {
         }
 
         // Close modal and reload data
-        closeExerciseDetail();
+        const completedDraftKey = buildSessionDraftKey(state.selectedDay, exercise.exercise_id);
+        delete state.modal.sessionDrafts[completedDraftKey];
+        persistSessionDraftsToStorage();
+        closeExerciseDetail(false);
         await loadDayData(state.selectedDay);
         renderWorkout();
 
@@ -934,9 +1052,23 @@ window.openExerciseDetail = async (index) => {
     state.modal.exerciseId = exercise.exercise_id;
     state.modal.historyPage = 0;
 
-    // Initialize current session
-    state.modal.currentSession.sets = new Array(exercise.target_sets || 3).fill('');
-    state.modal.currentSession.weight = exercise.target_weight || 0;
+    // Initialize current session from draft (if any)
+    const targetSets = exercise.target_sets || 3;
+    const draftKey = buildSessionDraftKey(state.selectedDay, exercise.exercise_id);
+    const existingDraft = state.modal.sessionDrafts[draftKey];
+    if (existingDraft) {
+        const draftSets = Array.isArray(existingDraft.sets) ? existingDraft.sets.slice(0, targetSets) : [];
+        while (draftSets.length < targetSets) {
+            draftSets.push('');
+        }
+        state.modal.currentSession.sets = draftSets.map((reps) => reps === null || reps === undefined ? '' : reps.toString());
+        state.modal.currentSession.weight = typeof existingDraft.weight === 'number'
+            ? existingDraft.weight
+            : (exercise.target_weight || 0);
+    } else {
+        state.modal.currentSession.sets = new Array(targetSets).fill('');
+        state.modal.currentSession.weight = exercise.target_weight || 0;
+    }
 
     // Fetch history and PR data from API
     try {

@@ -482,12 +482,30 @@ button:active {
     gap: 4px;
 }
 
+.exercise-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .exercise-meta {
     font-size: 0.85rem;
     color: var(--text-secondary);
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.exercise-category-indicator {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.04);
 }
 
 .progress-badge {
@@ -497,6 +515,10 @@ button:active {
     border-radius: 12px;
     font-size: 0.75rem;
     font-weight: 600;
+}
+
+.exercise-meta .progress-badge {
+    margin-left: auto;
 }
 
 .chevron-icon {
@@ -1228,8 +1250,14 @@ button:active {
 }
 
 .exercise-category {
+    display: inline-flex;
+    align-items: center;
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: 13px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 3px 10px;
+    background: rgba(255, 255, 255, 0.04);
 }
 
 /* Empty State */
