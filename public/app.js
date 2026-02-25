@@ -134,11 +134,6 @@ function renderWorkout() {
                                 </div>
                                 <button class="btn-remove" onclick="removeExercise(${idx})" aria-label="Remove exercise">×</button>
                             </div>
-                            ${ex.type === 'cardio' ? `
-                                <div class="edit-item-notes">
-                                    <input type="text" value="${ex.notes || ex.text || ''}" data-index="${idx}" class="exercise-input" aria-label="Exercise Notes" placeholder="e.g. 30 mins @ 5 km/h">
-                                </div>
-                            ` : ''}
                         </li>
                     `}).join('')}
                 </ul>

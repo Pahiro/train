@@ -384,6 +384,7 @@ button:active {
     display: flex;
     align-items: center;
     gap: 8px;
+    width: 100%;
 }
 
 .edit-item-info {
@@ -405,25 +406,6 @@ button:active {
     font-size: 12px;
     color: var(--text-secondary);
     margin-top: 2px;
-}
-
-.edit-item-notes {
-    padding: 8px 0 0 44px; /* align with name (handle width + gap) */
-}
-
-.edit-item-notes .exercise-input {
-    width: 100%;
-    padding: 8px 10px;
-    background-color: var(--input-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-primary);
-    font-size: 0.85rem;
-}
-
-.edit-item-notes .exercise-input:focus {
-    border-color: var(--accent-color);
-    outline: none;
 }
 
 .type-selector {
