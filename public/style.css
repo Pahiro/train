@@ -336,30 +336,37 @@ button:active {
 
 /* Drag and Drop Styles */
 .draggable-item {
-    cursor: move;
-    transition: all 0.2s ease;
+    position: relative;
+    transition: transform 0.2s ease;
 }
 
 .drag-handle {
-    display: inline-block;
-    width: 24px;
-    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
     color: var(--text-secondary);
-    font-size: 1.2rem;
+    font-size: 1.4rem;
     cursor: grab;
-    margin-right: 8px;
+    margin-right: 4px;
     user-select: none;
-    line-height: 24px;
-    text-align: center;
+    touch-action: none; /* Required for pointer events on touch */
+    border-radius: 4px;
+    letter-spacing: 2px;
 }
 
 .drag-handle:active {
     cursor: grabbing;
+    background: rgba(0, 229, 255, 0.1);
 }
 
 .draggable-item.dragging {
-    opacity: 0.5;
-    background-color: rgba(0, 229, 255, 0.1);
+    opacity: 0.9;
+    z-index: 10;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 229, 255, 0.4);
+    background-color: rgba(0, 229, 255, 0.06);
+    transition: none; /* Follow pointer instantly, don't transition transform */
 }
 
 /* Enhanced Edit Mode Styles */
@@ -458,7 +465,7 @@ button:active {
 
 /* Draggable visual update */
 .edit-item.dragging {
-    opacity: 0.6;
+    opacity: 0.9;
     border-color: var(--accent-color);
 }
 

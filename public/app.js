@@ -123,7 +123,7 @@ function renderWorkout() {
                     ${exercises.map((ex, idx) => {
             const isWeight = ex.type === 'weight' || ex.type === 'assisted';
             return `
-                        <li draggable="true" data-index="${idx}" class="draggable-item edit-item">
+                        <li data-index="${idx}" class="draggable-item edit-item">
                             <div class="edit-item-header">
                                 <span class="drag-handle" aria-label="Drag to reorder">::</span>
                                 <span class="exercise-type-label">${isWeight ? 'Weight Training' : 'Cardio'}</span>
@@ -452,99 +452,119 @@ window.saveChanges = async () => {
 
 // Deprecated: updateStateFromInputs() function removed - now using API-based updates
 
-// Drag and Drop Functions
+// Drag and Drop Functions (pointer-based for touch + mouse support)
 function attachDragListeners() {
-    const items = document.querySelectorAll('.draggable-item');
+    const list = document.getElementById('exercise-list');
+    if (!list) return;
 
-    items.forEach(item => {
-        item.addEventListener('dragstart', handleDragStart);
-        item.addEventListener('dragover', handleDragOver);
-        item.addEventListener('drop', handleDrop);
-        item.addEventListener('dragend', handleDragEnd);
-        item.addEventListener('dragenter', handleDragEnter);
-        item.addEventListener('dragleave', handleDragLeave);
+    list.querySelectorAll('.drag-handle').forEach(handle => {
+        handle.addEventListener('pointerdown', onDragPointerDown);
     });
 }
 
-function handleDragStart(e) {
-    state.dragState.draggedIndex = parseInt(e.target.dataset.index);
-    e.target.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-}
-
-function handleDragOver(e) {
+function onDragPointerDown(e) {
+    if (e.button !== 0) return; // primary pointer only
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    return false;
-}
 
-function handleDragEnter(e) {
-    const target = e.target.closest('.draggable-item');
-    if (target) {
-        target.classList.add('drag-over');
-    }
-}
+    const handle = e.currentTarget;
+    const dragEl = handle.closest('.draggable-item');
+    const list = document.getElementById('exercise-list');
+    if (!dragEl || !list) return;
 
-function handleDragLeave(e) {
-    const target = e.target.closest('.draggable-item');
-    if (target && !target.contains(e.relatedTarget)) {
-        target.classList.remove('drag-over');
-    }
-}
+    // Capture pointer so we get events even outside the element
+    handle.setPointerCapture(e.pointerId);
 
-async function handleDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
+    const items = [...list.children];
+    if (items.length < 2) return; // nothing to reorder
 
-    const target = e.target.closest('.draggable-item');
-    if (!target) return;
+    const fromIndex = items.indexOf(dragEl);
+    const itemRects = items.map(el => el.getBoundingClientRect());
+    const startY = e.clientY;
 
-    const dropIndex = parseInt(target.dataset.index);
-    const dragIndex = state.dragState.draggedIndex;
+    // Calculate item slot height from actual positions
+    const itemHeight = items.length > 1
+        ? itemRects[1].top - itemRects[0].top
+        : itemRects[0].height + 12;
 
-    if (dragIndex !== null && dragIndex !== dropIndex) {
-        // Reorder the exercises array locally
-        const exercises = [...state.exercises];
-        const [draggedItem] = exercises.splice(dragIndex, 1);
-        exercises.splice(dropIndex, 0, draggedItem);
+    let toIndex = fromIndex;
 
-        // Update state
-        state.exercises = exercises;
+    dragEl.classList.add('dragging');
 
-        // Call reorder API
-        const routineIds = exercises.map(ex => ex.routine_id);
-        try {
-            await fetch('/api/routines/reorder', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    day_of_week: state.selectedDay,
-                    routine_ids: routineIds
-                })
+    function onMove(ev) {
+        const dy = ev.clientY - startY;
+
+        // Move dragged element with pointer
+        dragEl.style.transform = `translateY(${dy}px)`;
+
+        // Calculate target index from displacement
+        let newTo = fromIndex + Math.round(dy / itemHeight);
+        newTo = Math.max(0, Math.min(items.length - 1, newTo));
+
+        if (newTo !== toIndex) {
+            toIndex = newTo;
+
+            // Shift other items to create a visual gap
+            items.forEach((item, i) => {
+                if (i === fromIndex) return;
+                let shift = 0;
+                if (fromIndex < toIndex && i > fromIndex && i <= toIndex) {
+                    shift = -itemHeight; // shift up
+                } else if (fromIndex > toIndex && i >= toIndex && i < fromIndex) {
+                    shift = itemHeight;  // shift down
+                }
+                item.style.transform = shift ? `translateY(${shift}px)` : '';
             });
-
-            // Re-render
-            renderWorkout();
-        } catch (err) {
-            console.error('Failed to reorder:', err);
-            // Reload on error
-            await loadDayData(state.selectedDay);
-            renderWorkout();
         }
     }
 
-    return false;
-}
+    async function onEnd() {
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onEnd);
+        handle.removeEventListener('pointercancel', onEnd);
 
-function handleDragEnd(e) {
-    e.target.classList.remove('dragging');
+        // Clear all transforms and classes
+        items.forEach(item => {
+            item.style.transform = '';
+            item.classList.remove('dragging');
+        });
 
-    // Remove all drag-over classes
-    document.querySelectorAll('.drag-over').forEach(item => {
-        item.classList.remove('drag-over');
-    });
+        if (fromIndex !== toIndex) {
+            // Reorder local state
+            const exercises = [...state.exercises];
+            const [moved] = exercises.splice(fromIndex, 1);
+            exercises.splice(toIndex, 0, moved);
+            state.exercises = exercises;
 
-    state.dragState.draggedIndex = null;
+            // Re-render immediately so the list shows the new order
+            renderWorkout();
+
+            // Persist to API
+            const routineIds = exercises.map(ex => ex.routine_id);
+            try {
+                const res = await fetch('/api/routines/reorder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        day_of_week: state.selectedDay,
+                        routine_ids: routineIds
+                    })
+                });
+                if (!res.ok) {
+                    console.error('Reorder API error:', res.status);
+                    await loadDayData(state.selectedDay);
+                    renderWorkout();
+                }
+            } catch (err) {
+                console.error('Failed to reorder:', err);
+                await loadDayData(state.selectedDay);
+                renderWorkout();
+            }
+        }
+    }
+
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onEnd);
+    handle.addEventListener('pointercancel', onEnd);
 }
 
 init();

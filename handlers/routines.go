@@ -344,6 +344,16 @@ func (h *RoutinesHandler) reorderRoutines(w http.ResponseWriter, r *http.Request
 	defer tx.Rollback()
 
 	// Update order_index for each routine
+	// Two-pass approach: first set all to negative temporary values to avoid
+	// violating the UNIQUE(day_of_week, order_index) constraint during reorder
+	for i, routineID := range req.RoutineIDs {
+		_, err := tx.Exec("UPDATE routines SET order_index = ? WHERE id = ? AND day_of_week = ?",
+			-(i + 1), routineID, req.DayOfWeek)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to reorder routines: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
 	for i, routineID := range req.RoutineIDs {
 		_, err := tx.Exec("UPDATE routines SET order_index = ? WHERE id = ? AND day_of_week = ?",
 			i, routineID, req.DayOfWeek)
