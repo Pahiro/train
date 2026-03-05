@@ -1024,7 +1024,7 @@ window.completeExerciseSession = async () => {
             // consecutive_successes is computed from history, so after saving we need to check
             // The current session counts as +1 if successful
             const newConsecutive = isSuccessful ? (exercise.consecutive_successes || 0) + 1 : 0;
-            if (newConsecutive >= 3) {
+            if (newConsecutive === 3) {
                 const newTargetReps = (exercise.target_reps || 0) + 1;
                 await fetch(`/api/exercises/${exercise.exercise_id}`, {
                     method: 'PUT',
