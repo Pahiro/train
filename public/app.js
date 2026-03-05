@@ -906,6 +906,18 @@ window.adjustWeight = (delta) => {
     updateModalStats();
 };
 
+window.adjustTargetReps = async (delta) => {
+    const exercise = state.exercises[state.modal.exerciseIndex];
+    const newTargetReps = Math.max(1, (exercise.target_reps || 1) + delta);
+    exercise.target_reps = newTargetReps;
+    await fetch(`/api/exercises/${exercise.exercise_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_reps: newTargetReps })
+    });
+    renderExerciseModal();
+};
+
 window.updateSetReps = (setIndex, value) => {
     state.modal.currentSession.sets[setIndex] = value;
     updateModalStats();
@@ -1164,6 +1176,12 @@ async function renderExerciseModal() {
                     </div>
                     ` : `
                     <div class="weight-section">
+                        <label>Target Reps</label>
+                        <div class="weight-control">
+                            <button class="weight-btn" onclick="adjustTargetReps(-1)">-</button>
+                            <span class="weight-display">${exercise.target_reps} reps</span>
+                            <button class="weight-btn" onclick="adjustTargetReps(1)">+</button>
+                        </div>
                         <div class="target-display">Target: ${exercise.target_sets}×${exercise.target_reps} reps</div>
                     </div>
                     `}
