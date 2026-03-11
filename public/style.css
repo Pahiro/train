@@ -2266,3 +2266,111 @@ a:focus-visible {
         font-size: 12px;
     }
 }
+
+/* ===== Plan Editor ===== */
+.plan-container {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    height: calc(100vh - 120px);
+}
+
+.plan-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+}
+
+.plan-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.plan-status {
+    font-size: 14px;
+    flex: 1;
+}
+
+.plan-status--success {
+    color: var(--success-color);
+}
+
+.plan-status--error {
+    color: var(--danger-color);
+}
+
+.plan-textarea {
+    flex: 1;
+    width: 100%;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-md);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+    min-height: 300px;
+}
+
+.plan-textarea:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.plan-format-guide {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.plan-format-guide summary {
+    padding: 10px var(--spacing-md);
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+.plan-format-guide summary:hover {
+    color: var(--text-primary);
+}
+
+.plan-format-body {
+    padding: var(--spacing-md);
+    border-top: 1px solid var(--border-color);
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.plan-format-body pre {
+    background: var(--bg-color);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-md);
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+    color: var(--text-primary);
+}
+
+.plan-format-body strong {
+    color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+    .plan-container {
+        height: calc(100vh - 140px);
+        padding: var(--spacing-md);
+    }
+}

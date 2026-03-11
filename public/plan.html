@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plan Editor - Workout Planner</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <meta name="theme-color" content="#121212">
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <div id="loading" role="status" aria-live="polite">Loading...</div>
+
+    <header role="banner">
+        <div class="header-content">
+            <h1>Plan Editor</h1>
+        </div>
+        <nav class="header-nav">
+            <a href="/" class="nav-link">Workout</a>
+            <a href="/exercises.html" class="nav-link">Exercises</a>
+            <a href="/metrics.html" class="nav-link">Metrics</a>
+            <a href="/plan.html" class="nav-link active">Plan</a>
+        </nav>
+    </header>
+
+    <main class="plan-container" id="main-content" role="main">
+        <div class="plan-toolbar">
+            <div class="plan-actions">
+                <button id="refresh-btn" class="btn btn-secondary">Reload</button>
+                <button id="copy-btn" class="btn btn-secondary">Copy</button>
+                <button id="apply-btn" class="btn btn-primary">Apply Plan</button>
+            </div>
+            <div id="plan-status" class="plan-status" role="status" aria-live="polite"></div>
+        </div>
+
+        <textarea
+            id="plan-textarea"
+            class="plan-textarea"
+            spellcheck="false"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            placeholder="Loading plan..."></textarea>
+
+        <details class="plan-format-guide">
+            <summary>Format guide</summary>
+            <div class="plan-format-body">
+                <p>One section per day. Each exercise on its own line:</p>
+                <pre># Monday: Push Day
+1. Bench Press | weight | Arms-Push | 4x8 | 80kg
+2. Pull-ups | bodyweight | Arms-Pull | 3x10
+
+# Tuesday: Leg Day
+1. Squats | weight | Legs-Push | 4x6 | 100kg</pre>
+                <p><strong>Types:</strong> weight, bodyweight, assisted, cardio</p>
+                <p><strong>Categories:</strong> Legs-Push, Legs-Pull, Arms-Push, Arms-Pull, Core-Push, Core-Pull</p>
+                <p><strong>Weight</strong> is optional — omit for bodyweight/cardio exercises.</p>
+                <p>Only days present in the text are updated. Workout history is never affected.</p>
+            </div>
+        </details>
+    </main>
+
+    <script src="plan.js"></script>
+</body>
+</html>
