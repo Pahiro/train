@@ -2276,20 +2276,18 @@ a:focus-visible {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
-    height: calc(100vh - 120px);
+    padding-bottom: var(--spacing-lg);
 }
 
 .plan-toolbar {
     display: flex;
     align-items: center;
     gap: var(--spacing-md);
-    flex-wrap: wrap;
 }
 
 .plan-actions {
     display: flex;
     gap: 8px;
-    flex-wrap: wrap;
 }
 
 .plan-status {
@@ -2306,7 +2304,6 @@ a:focus-visible {
 }
 
 .plan-textarea {
-    flex: 1;
     width: 100%;
     background: var(--input-bg);
     color: var(--text-primary);
@@ -2316,9 +2313,9 @@ a:focus-visible {
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 14px;
     line-height: 1.6;
-    resize: none;
+    resize: vertical;
     outline: none;
-    min-height: 300px;
+    min-height: calc(100vh - 320px);
 }
 
 .plan-textarea:focus {
@@ -2370,7 +2367,10 @@ a:focus-visible {
 
 @media (max-width: 768px) {
     .plan-container {
-        height: calc(100vh - 140px);
         padding: var(--spacing-md);
+    }
+
+    .plan-textarea {
+        min-height: calc(100vh - 340px);
     }
 }
