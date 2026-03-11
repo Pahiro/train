@@ -42,6 +42,7 @@ func main() {
 	http.Handle("/api/metrics/", &handlers.MetricsHandler{DB: database})
 	http.Handle("/api/metric-entries", &handlers.MetricEntriesHandler{DB: database})
 	http.Handle("/api/metric-entries/", &handlers.MetricEntriesHandler{DB: database})
+	http.Handle("/api/plan", &handlers.PlanHandler{DB: database})
 
 	log.Printf("Server listening on http://localhost%s", port)
 	err = http.ListenAndServe(port, nil)
