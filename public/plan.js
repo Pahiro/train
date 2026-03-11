@@ -40,8 +40,8 @@ async function applyPlan() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ plan }),
         });
+        if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
-        if (!res.ok) throw new Error(data || res.statusText);
         showStatus(`Applied — ${data.days_updated} day(s) updated.`, 'success');
     } catch (err) {
         showStatus('Error: ' + err.message, 'error');

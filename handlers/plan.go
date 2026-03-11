@@ -34,6 +34,9 @@ func (h *PlanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *PlanHandler) exportPlan(w http.ResponseWriter, r *http.Request) {
 	var sb strings.Builder
 
+	sb.WriteString("# Types: weight | bodyweight | cardio | assisted\n")
+	sb.WriteString("# Categories: Legs-Push | Legs-Pull | Arms-Push | Arms-Pull | Core-Push | Core-Pull\n\n")
+
 	for _, day := range weekDays {
 		var title string
 		h.DB.QueryRow("SELECT title FROM day_titles WHERE day_of_week = ?", day).Scan(&title)
@@ -142,11 +145,13 @@ func parsePlan(text string) map[string]planDay {
 			continue
 		}
 
-		if m := dayHeaderRe.FindStringSubmatch(line); m != nil {
-			currentDay = capitalizeFirst(strings.ToLower(m[1]))
-			result[currentDay] = planDay{
-				Title:     strings.TrimSpace(m[2]),
-				Exercises: []planExercise{},
+		if strings.HasPrefix(line, "#") {
+			if m := dayHeaderRe.FindStringSubmatch(line); m != nil {
+				currentDay = capitalizeFirst(strings.ToLower(m[1]))
+				result[currentDay] = planDay{
+					Title:     strings.TrimSpace(m[2]),
+					Exercises: []planExercise{},
+				}
 			}
 			continue
 		}
