@@ -203,14 +203,30 @@ func (h *HistoryHandler) createHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if this is a new PR
-	// For 'assisted' exercises, a PR is a *lower* weight (less assistance needed).
-	// For all other weighted exercises, a PR is a higher weight.
+	// Check if this is a new PR. PR definition varies by exercise type:
+	//   timed_hold: highest volume (client sends volume = max hold time in seconds)
+	//   assisted:   lowest weight (less assistance = better)
+	//   all others with weight: highest weight
 	isPR := false
-	if req.Weight != nil && *req.Weight > 0 {
-		var exerciseType string
-		h.DB.QueryRow(`SELECT type FROM exercises WHERE id = ?`, req.ExerciseID).Scan(&exerciseType)
+	var exerciseType string
+	h.DB.QueryRow(`SELECT type FROM exercises WHERE id = ?`, req.ExerciseID).Scan(&exerciseType)
 
+	if exerciseType == "timed_hold" {
+		// PR = longest single hold; client stores max(sets_completed) in volume field
+		if req.Volume != nil && *req.Volume > 0 {
+			var prevMaxVol sql.NullFloat64
+			err := h.DB.QueryRow(`SELECT MAX(volume) FROM history WHERE exercise_id = ?`, req.ExerciseID).Scan(&prevMaxVol)
+			if err == nil && (!prevMaxVol.Valid || *req.Volume > prevMaxVol.Float64) {
+				isPR = true
+				_, err = h.DB.Exec("UPDATE history SET is_pr = 0 WHERE exercise_id = ?", req.ExerciseID)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("Failed to update PR flags: %v", err), http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+	} else if req.Weight != nil && *req.Weight > 0 {
+		// Weight-based PR: assisted = lower is better; all others = higher is better
 		var compareWeight sql.NullFloat64
 		var err error
 		if exerciseType == "assisted" {
@@ -230,8 +246,6 @@ func (h *HistoryHandler) createHistory(w http.ResponseWriter, r *http.Request) {
 
 		if err == nil && isPRCondition {
 			isPR = true
-
-			// Clear old PR flags for this exercise
 			_, err = h.DB.Exec("UPDATE history SET is_pr = 0 WHERE exercise_id = ?", req.ExerciseID)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("Failed to update PR flags: %v", err), http.StatusInternalServerError)

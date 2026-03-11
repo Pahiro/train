@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS exercises (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
-    type TEXT NOT NULL CHECK(type IN ('cardio', 'weight', 'bodyweight', 'assisted')),
+    type TEXT NOT NULL CHECK(type IN ('cardio', 'weight', 'bodyweight', 'assisted', 'carry', 'timed_hold')),
     category TEXT CHECK(category IN ('Legs-Push', 'Legs-Pull', 'Arms-Push', 'Arms-Pull', 'Core-Push', 'Core-Pull')),
     target_sets INTEGER,
     target_reps INTEGER,

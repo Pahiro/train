@@ -72,7 +72,7 @@ func migrateExerciseTypeConstraint(db *sql.DB) error {
 	if err != nil {
 		return nil // Fresh DB; schema.sql already has the correct constraint.
 	}
-	if strings.Contains(createSQL, "assisted") {
+	if strings.Contains(createSQL, "timed_hold") {
 		return nil // Already up to date.
 	}
 
@@ -87,7 +87,7 @@ func migrateExerciseTypeConstraint(db *sql.DB) error {
 		`CREATE TABLE exercises_new (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL UNIQUE,
-			type TEXT NOT NULL CHECK(type IN ('cardio', 'weight', 'bodyweight', 'assisted')),
+			type TEXT NOT NULL CHECK(type IN ('cardio', 'weight', 'bodyweight', 'assisted', 'carry', 'timed_hold')),
 			category TEXT CHECK(category IN ('Legs-Push', 'Legs-Pull', 'Arms-Push', 'Arms-Pull', 'Core-Push', 'Core-Pull')),
 			target_sets INTEGER,
 			target_reps INTEGER,
@@ -125,7 +125,7 @@ func OpenForTesting() (*DB, error) {
 		`CREATE TABLE IF NOT EXISTS exercises (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL UNIQUE,
-			type TEXT NOT NULL CHECK(type IN ('cardio', 'weight', 'bodyweight', 'assisted')),
+			type TEXT NOT NULL CHECK(type IN ('cardio', 'weight', 'bodyweight', 'assisted', 'carry', 'timed_hold')),
 			category TEXT,
 			target_sets INTEGER,
 			target_reps INTEGER,

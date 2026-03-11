@@ -113,20 +113,38 @@ function setupEventListeners() {
         }
     });
 
-    // Disable category for cardio exercises, show/hide targets
+    // Disable category for cardio exercises, show/hide targets, update labels
     dom.exerciseType.addEventListener('change', (e) => {
-        if (e.target.value === 'cardio') {
-            dom.exerciseCategory.value = '';
-            dom.exerciseCategory.disabled = true;
-            dom.targetsGroup.style.display = 'none';
-        } else {
-            dom.exerciseCategory.disabled = false;
-            dom.targetsGroup.style.display = 'block';
-            // Show/hide weight field based on type
-            dom.exerciseTargetWeight.closest('.form-group').style.display =
-                e.target.value === 'bodyweight' ? 'none' : 'block';
-        }
+        applyTypeUI(e.target.value);
     });
+}
+
+function applyTypeUI(type) {
+    if (type === 'cardio') {
+        dom.exerciseCategory.disabled = true;
+        dom.targetsGroup.style.display = 'none';
+    } else if (type === '') {
+        dom.exerciseCategory.disabled = false;
+        dom.targetsGroup.style.display = 'block';
+        dom.exerciseTargetWeight.closest('.form-group').style.display = 'block';
+    } else {
+        dom.exerciseCategory.disabled = false;
+        dom.targetsGroup.style.display = 'block';
+        dom.exerciseTargetWeight.closest('.form-group').style.display =
+            type === 'bodyweight' ? 'none' : 'block';
+    }
+    const repsLabel = document.getElementById('label-target-reps');
+    const weightLabel = document.getElementById('label-target-weight');
+    if (repsLabel) {
+        if (type === 'carry') repsLabel.textContent = 'Laps';
+        else if (type === 'timed_hold') repsLabel.textContent = 'Seconds';
+        else repsLabel.textContent = 'Reps';
+    }
+    if (weightLabel) {
+        if (type === 'carry') weightLabel.textContent = 'Weight per hand (kg)';
+        else if (type === 'timed_hold') weightLabel.textContent = 'Added weight (kg, optional)';
+        else weightLabel.textContent = 'Weight (kg)';
+    }
 }
 
 // Load exercises from API
@@ -235,7 +253,9 @@ function createExerciseCard(exercise) {
         weight: '#00E5FF',
         bodyweight: '#00C853',
         assisted: '#B388FF',
-        cardio: '#FF9800'
+        cardio: '#FF9800',
+        carry: '#FFD740',
+        timed_hold: '#EA80FC'
     };
 
     const typeColor = typeColors[exercise.type] || '#888';
@@ -275,9 +295,7 @@ function openAddModal() {
     dom.modalTitle.textContent = 'Add Exercise';
     dom.saveBtn.textContent = 'Save Exercise';
     dom.exerciseForm.reset();
-    dom.exerciseCategory.disabled = false;
-    dom.targetsGroup.style.display = 'block';
-    dom.exerciseTargetWeight.closest('.form-group').style.display = 'block';
+    applyTypeUI('');
     dom.exerciseModal.style.display = 'flex';
 }
 
@@ -291,21 +309,11 @@ function openEditModal(exerciseId) {
     dom.exerciseName.value = exercise.name;
     dom.exerciseType.value = exercise.type;
     dom.exerciseCategory.value = exercise.category || '';
-    dom.exerciseCategory.disabled = exercise.type === 'cardio';
-
-    // Populate target fields
     dom.exerciseTargetSets.value = exercise.target_sets || '';
     dom.exerciseTargetReps.value = exercise.target_reps || '';
     dom.exerciseTargetWeight.value = exercise.target_weight || '';
 
-    // Show/hide targets based on type
-    if (exercise.type === 'cardio') {
-        dom.targetsGroup.style.display = 'none';
-    } else {
-        dom.targetsGroup.style.display = 'block';
-        dom.exerciseTargetWeight.closest('.form-group').style.display =
-            exercise.type === 'bodyweight' ? 'none' : 'block';
-    }
+    applyTypeUI(exercise.type);
 
     dom.exerciseModal.style.display = 'flex';
 }
@@ -338,7 +346,7 @@ async function handleSubmit(e) {
     // Gather targets
     const targetSets = type !== 'cardio' && dom.exerciseTargetSets.value ? parseInt(dom.exerciseTargetSets.value) : null;
     const targetReps = type !== 'cardio' && dom.exerciseTargetReps.value ? parseInt(dom.exerciseTargetReps.value) : null;
-    const targetWeight = (type === 'weight' || type === 'assisted') && dom.exerciseTargetWeight.value ? parseFloat(dom.exerciseTargetWeight.value) : null;
+    const targetWeight = (type !== 'cardio' && type !== 'bodyweight') && dom.exerciseTargetWeight.value ? parseFloat(dom.exerciseTargetWeight.value) : null;
 
     if (!name || !type) {
         alert('Please fill in all required fields');
@@ -502,22 +510,22 @@ function renderHistoryModal() {
                 </div>
 
                 <div class="modal-body">
-                    ${exercise && exercise.type === 'weight' && pr ? `
+                    ${exercise && ['weight', 'assisted', 'carry', 'timed_hold'].includes(exercise.type) && pr ? `
                         <div class="pr-section">
                             <div class="pr-badge-large">
                                 <span class="pr-icon">🏆</span>
                                 <div class="pr-details">
                                     <div class="pr-label">Personal Record</div>
-                                    <div class="pr-value">${pr.weight} kg</div>
+                                    <div class="pr-value">${exercise.type === 'timed_hold' ? pr.volume + 's' : pr.weight + ' kg'}</div>
                                     <div class="pr-date">${pr.date}</div>
                                 </div>
                             </div>
                         </div>
                     ` : ''}
 
-                    ${exercise && exercise.type === 'weight' && graphHistory.length > 0 ? `
+                    ${exercise && ['weight', 'assisted', 'carry', 'timed_hold'].includes(exercise.type) && graphHistory.length > 0 ? `
                         <div class="graph-section">
-                            <h3>Weight Progression</h3>
+                            <h3>${exercise.type === 'timed_hold' ? 'Hold Time Progression' : 'Weight Progression'}</h3>
                             <div class="graph-container">
                                 <canvas id="history-weight-graph" width="400" height="200"></canvas>
                             </div>
@@ -532,9 +540,9 @@ function renderHistoryModal() {
                                     <thead>
                                         <tr>
                                             <th>Date</th>
-                                            ${exercise && exercise.type === 'weight' ? '<th>Weight</th>' : ''}
-                                            ${exercise && exercise.type === 'weight' ? '<th>Sets × Reps</th>' : ''}
-                                            ${exercise && exercise.type === 'weight' ? '<th>Volume</th>' : ''}
+                                            ${exercise && ['weight', 'assisted', 'carry'].includes(exercise.type) ? '<th>Weight</th>' : ''}
+                                            ${exercise && exercise.type !== 'cardio' ? `<th>${exercise.type === 'timed_hold' ? 'Sets (s)' : exercise.type === 'carry' ? 'Sets (laps)' : 'Sets × Reps'}</th>` : ''}
+                                            ${exercise && ['weight', 'assisted', 'carry', 'timed_hold'].includes(exercise.type) ? '<th>Volume</th>' : ''}
                                             <th>Status</th>
                                         </tr>
                                     </thead>
@@ -542,9 +550,10 @@ function renderHistoryModal() {
                                         ${currentPageHistory.map(session => `
                                             <tr class="${session.completed ? 'session-complete' : 'session-incomplete'}">
                                                 <td>${session.session_date}</td>
-                                                ${exercise && exercise.type === 'weight' ? `<td>${session.weight} kg ${session.is_pr ? '🏆' : ''}</td>` : ''}
-                                                ${exercise && exercise.type === 'weight' ? `<td>${session.sets_completed.join(', ')}</td>` : ''}
-                                                ${exercise && exercise.type === 'weight' ? `<td>${session.volume} kg</td>` : ''}
+                                                ${exercise && ['weight', 'assisted', 'carry'].includes(exercise.type) ? `<td>${session.weight} kg ${session.is_pr ? '🏆' : ''}</td>` : ''}
+                                                ${exercise && exercise.type !== 'cardio' ? `<td>${session.sets_completed.join(', ')} ${session.is_pr && exercise.type === 'timed_hold' ? '🏆' : ''}</td>` : ''}
+                                                ${exercise && ['weight', 'assisted', 'carry'].includes(exercise.type) ? `<td>${session.volume} kg</td>` : ''}
+                                                ${exercise && exercise.type === 'timed_hold' ? `<td>${session.volume}s</td>` : ''}
                                                 <td><span class="status-badge ${session.completed ? 'complete' : 'incomplete'}">${session.completed ? '✓' : '✗'}</span></td>
                                             </tr>
                                         `).join('')}
@@ -592,8 +601,8 @@ function renderHistoryModal() {
     });
 
     // Render graph if there's history
-    if (exercise && exercise.type === 'weight' && graphHistory.length > 0) {
-        setTimeout(() => renderWeightGraph(graphHistory, pr), 50);
+    if (exercise && ['weight', 'assisted', 'carry', 'timed_hold'].includes(exercise.type) && graphHistory.length > 0) {
+        setTimeout(() => renderWeightGraph(graphHistory, pr, exercise.type), 50);
     }
 }
 
@@ -624,7 +633,7 @@ window.changePage = (direction) => {
 };
 
 // Render weight progression graph (reused from app.js)
-function renderWeightGraph(history, pr) {
+function renderWeightGraph(history, pr, exerciseType = 'weight') {
     const canvas = document.getElementById('history-weight-graph');
     if (!canvas) return;
 
@@ -636,17 +645,22 @@ function renderWeightGraph(history, pr) {
     // Clear canvas
     ctx.clearRect(0, 0, width, height);
 
-    const weights = history.map(s => s.weight);
+    const isTimedHold = exerciseType === 'timed_hold';
+    // For timed_hold: plot volume (max hold time). For others: plot weight.
+    const weights = history.map(s => isTimedHold ? s.volume : s.weight);
     if (weights.length === 0) return;
+
+    const prValue = isTimedHold ? (pr && pr.volume) : (pr && pr.weight);
+    const yUnit = isTimedHold ? 's' : 'kg';
 
     // Determine Y-axis range
     let minWeight = Math.min(...weights);
     let maxWeight = Math.max(...weights);
 
     // Include PR in range if it exists
-    if (pr && pr.weight) {
-        minWeight = Math.min(minWeight, pr.weight);
-        maxWeight = Math.max(maxWeight, pr.weight);
+    if (prValue) {
+        minWeight = Math.min(minWeight, prValue);
+        maxWeight = Math.max(maxWeight, prValue);
     }
 
     // Add padding to range
@@ -685,8 +699,8 @@ function renderWeightGraph(history, pr) {
     }
 
     // Draw PR line (horizontal dashed line)
-    if (pr && pr.weight) {
-        const prY = padding + graphHeight * (1 - (pr.weight - minWeight) / (maxWeight - minWeight));
+    if (prValue) {
+        const prY = padding + graphHeight * (1 - (prValue - minWeight) / (maxWeight - minWeight));
 
         ctx.strokeStyle = '#FF5252';
         ctx.lineWidth = 2;
@@ -701,7 +715,7 @@ function renderWeightGraph(history, pr) {
         ctx.fillStyle = '#FF5252';
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(`PR: ${pr.weight}kg`, padding + 5, prY - 5);
+        ctx.fillText(`PR: ${prValue}${yUnit}`, padding + 5, prY - 5);
     }
 
     // Plot data points and line

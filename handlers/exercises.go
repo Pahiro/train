@@ -159,8 +159,9 @@ func (h *ExercisesHandler) createExercise(w http.ResponseWriter, r *http.Request
 	}
 
 	// Validate type
-	if req.Type != "cardio" && req.Type != "weight" && req.Type != "bodyweight" && req.Type != "assisted" {
-		http.Error(w, "Invalid type. Must be cardio, weight, bodyweight, or assisted", http.StatusBadRequest)
+	validTypes := map[string]bool{"cardio": true, "weight": true, "bodyweight": true, "assisted": true, "carry": true, "timed_hold": true}
+	if !validTypes[req.Type] {
+		http.Error(w, "Invalid type. Must be cardio, weight, bodyweight, assisted, carry, or timed_hold", http.StatusBadRequest)
 		return
 	}
 

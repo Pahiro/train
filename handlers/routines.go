@@ -86,7 +86,7 @@ func (h *RoutinesHandler) getRoutinesByDay(w http.ResponseWriter, r *http.Reques
 			e.target_weight,
 			(SELECT MAX(session_date) FROM history WHERE exercise_id = e.id) as last_done,
 			CASE
-				WHEN e.type = 'bodyweight' THEN
+				WHEN e.type IN ('bodyweight', 'timed_hold') THEN
 					(SELECT COUNT(*) FROM history
 					 WHERE exercise_id = e.id AND completed = 1
 					   AND session_date >= COALESCE(
